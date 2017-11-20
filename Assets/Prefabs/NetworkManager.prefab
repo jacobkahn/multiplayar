@@ -58,6 +58,4 @@ MonoBehaviour:
   mainCamera: {fileID: 0}
   hitCubePrefab: {fileID: 1203298768389982, guid: 75cbbe6ac35af4d1a9c4ef7f02933458,
     type: 2}
-  newCube: {fileID: 0}
   anchor: {fileID: 0}
-  frames: 0

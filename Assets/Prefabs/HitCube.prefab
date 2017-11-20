@@ -22,7 +22,7 @@ GameObject:
   - component: {fileID: 33357069292446364}
   - component: {fileID: 23221900966328424}
   - component: {fileID: 95143758408582758}
-  - component: {fileID: 114138572769934742}
+  - component: {fileID: 114309333666448716}
   - component: {fileID: 114874325076810086}
   m_Layer: 0
   m_Name: anchor
@@ -136,7 +136,7 @@ Animator:
   m_WarningMessage: 
   m_HasTransformHierarchy: 1
   m_AllowConstantClipSamplingOptimization: 1
---- !u!114 &114138572769934742
+--- !u!114 &114309333666448716
 MonoBehaviour:
   m_ObjectHideFlags: 1
   m_PrefabParentObject: {fileID: 0}
@@ -144,9 +144,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 1179223561519426}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: c6b60145683ea4a11ad8a81367b34c31, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  speed: 2
 --- !u!114 &114874325076810086
 MonoBehaviour:
   m_ObjectHideFlags: 1

@@ -18,12 +18,13 @@ public class NetworkManager : MonoBehaviour {
 	public Dictionary<int, string> reverseObjectMap = new Dictionary<int, string> ();
 	public GameObject mainCamera;
 	public GameObject hitCubePrefab;
-	public GameObject newCube;
 	public GameObject anchor;
-	public int frames;
 
 	private string userId;
 	private bool synced; 
+	private GameObject newCube;
+	private int frames;
+
 
 	[System.Serializable] 
 	public class VectorInformation {
@@ -33,15 +34,15 @@ public class NetworkManager : MonoBehaviour {
 		public string id;
 	}
 
-	[System.Serializable]
-	public class TransformData {
-		public List<VectorInformation> v = new List<VectorInformation>();
-	}
+//	[System.Serializable]
+//	public class TransformData {
+//		public List<VectorInformation> v;
+//	}
 
 	[System.Serializable]
 	public class RootObject {
-		public TransformData users;
-		public TransformData objects;
+		public List<VectorInformation> users;
+		public List<VectorInformation> objects;
 	
 		public static RootObject CreateFromJSON (string j) {
 			return JsonUtility.FromJson<RootObject> (j);
@@ -95,8 +96,8 @@ public class NetworkManager : MonoBehaviour {
 
 		Vector3 offset = OffsetFromAnchor (mainCamera);
 
-		Debug.Log (string.Format ("Offset: x:{0:0.######} y:{1:0.######} z:{2:0.######}", offset.x, offset.y, offset.z));
-		Debug.Log (offset);
+//		Debug.Log (string.Format ("Offset: x:{0:0.######} y:{1:0.######} z:{2:0.######}", offset.x, offset.y, offset.z));
+//		Debug.Log (offset);
 
 		WWWForm form = new WWWForm();
 		form.AddField("x", offset.x.ToString());
@@ -124,7 +125,12 @@ public class NetworkManager : MonoBehaviour {
 	 * signals the server that this is a brand new object.
 	 */
 	public void SendObject(string objectId, GameObject obj) {
-		Vector3 offset = OffsetFromAnchor (obj);
+//		Vector3 offset = OffsetFromAnchor (obj);
+		GameObject temp = new GameObject ();
+		temp.transform.RotateAround (anchor.transform.position, Vector3.up, -1.0f * anchor.transform.rotation.eulerAngles.y);
+		temp.transform.position = obj.transform.position - anchor.transform.position;
+		Vector3 offset = temp.transform.position;
+
 		WWWForm form = new WWWForm ();
 		form.AddField("x", offset.x.ToString());
 		form.AddField("y", offset.y.ToString());
@@ -155,7 +161,6 @@ public class NetworkManager : MonoBehaviour {
 			yield break;
 		}
 
-		Debug.Log("WWW Ok!: " + www.text);
 		userId = www.text;
 	}
 
@@ -171,7 +176,6 @@ public class NetworkManager : MonoBehaviour {
 			yield break;
 		}
 				
-		Debug.Log ("WWW Ok!: " + www.text);
 		string objectId = www.text;
 
 		if (!objectMap.ContainsKey (objectId)) {
@@ -197,18 +201,28 @@ public class NetworkManager : MonoBehaviour {
 			yield break;
 		}
 			
-		Debug.Log ("WWW Ok!: " + www.text);
 		RootObject root = RootObject.CreateFromJSON(www.text);
 
-		foreach (VectorInformation v in root.objects.v) {
+		Debug.Log ("WORLD SYNC: " + root.objects.Count);
+
+		foreach (VectorInformation v in root.objects) {
 			string objectId = v.id;
-			Vector3 offset = new Vector3 (v.x, v.y, v.z);
+			Vector3 otherPos = new Vector3 (v.x, v.y, v.z);
+
 
 			if (objectMap.ContainsKey (objectId)) {
 				GameObject obj = objectMap [objectId];
-				obj.transform.position = offset;
+
+				GameObject temp = new GameObject ();
+				temp.transform.position = obj.transform.position + anchor.transform.position;
+				temp.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
+				Vector3 newPos = temp.transform.position;
+
+				obj.transform.position = newPos;
 			} else {
-				GameObject other = Instantiate (hitCubePrefab, offset, Quaternion.identity);
+				GameObject other = Instantiate (hitCubePrefab, anchor.transform.position + otherPos, Quaternion.identity);
+				other.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
+
 				objectMap.Add (objectId, other);
 				reverseObjectMap.Add (other.GetInstanceID (), objectId);
 
@@ -216,6 +230,7 @@ public class NetworkManager : MonoBehaviour {
 				foreach (UnityEngine.XR.iOS.UnityARHitTestExample s in scripts) {
 					Destroy (s);
 				}
+
 			}
 		}
 	}
