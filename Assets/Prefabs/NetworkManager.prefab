@@ -51,6 +51,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fba1300698d3c4d20ad683050068d135, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  address: http://www.multiplayar.me/anchor
-  cube: {fileID: 0}
+  address: http://multiplayar.me/
+  anchorEndpoint: /anchor
+  objectEndpoint: /object
+  syncEndpoint: /sync
   mainCamera: {fileID: 0}
+  hitCubePrefab: {fileID: 1203298768389982, guid: 75cbbe6ac35af4d1a9c4ef7f02933458,
+    type: 2}
+  newCube: {fileID: 0}
+  anchor: {fileID: 0}
+  frames: 0

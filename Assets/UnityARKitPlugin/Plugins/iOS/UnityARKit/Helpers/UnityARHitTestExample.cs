@@ -7,6 +7,9 @@ namespace UnityEngine.XR.iOS
 	{
 		public Transform m_HitTransform;
 
+		void Start() {
+			Debug.Log ("fuck apple even though its technically not their fault");
+		} 
 
         bool HitTestWithResultType (ARPoint point, ARHitTestResultType resultTypes)
         {
@@ -35,6 +38,10 @@ namespace UnityEngine.XR.iOS
 						x = screenPosition.x,
 						y = screenPosition.y
 					};
+
+					if (screenPosition.y < .1) {
+						return;
+					}
 
                     // prioritize reults types
                     ARHitTestResultType[] resultTypes = {
