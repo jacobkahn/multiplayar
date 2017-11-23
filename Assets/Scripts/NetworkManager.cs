@@ -127,8 +127,9 @@ public class NetworkManager : MonoBehaviour {
 	public void SendObject(string objectId, GameObject obj) {
 //		Vector3 offset = OffsetFromAnchor (obj);
 		GameObject temp = new GameObject ();
+		temp.transform.position = obj.transform.position;
 		temp.transform.RotateAround (anchor.transform.position, Vector3.up, -1.0f * anchor.transform.rotation.eulerAngles.y);
-		temp.transform.position = obj.transform.position - anchor.transform.position;
+		temp.transform.position = temp.transform.position - anchor.transform.position;
 		Vector3 offset = temp.transform.position;
 
 		WWWForm form = new WWWForm ();
