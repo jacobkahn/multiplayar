@@ -129,7 +129,7 @@ public class NetworkManager : MonoBehaviour {
 		GameObject temp = new GameObject ();
 		temp.transform.position = obj.transform.position;
 		temp.transform.RotateAround (anchor.transform.position, Vector3.up, -1.0f * anchor.transform.rotation.eulerAngles.y);
-		temp.transform.position = temp.transform.position - anchor.transform.position;
+		temp.transform.position = anchor.transform.position - temp.transform.position;
 		Vector3 offset = temp.transform.position;
 
 		WWWForm form = new WWWForm ();
