@@ -126,11 +126,12 @@ public class NetworkManager : MonoBehaviour {
 	 */
 	public void SendObject(string objectId, GameObject obj) {
 //		Vector3 offset = OffsetFromAnchor (obj);
-		GameObject temp = new GameObject ();
-		temp.transform.position = obj.transform.position;
+//		GameObject temp = new GameObject ();
+//		temp.transform.position = obj.transform.position;
 //		temp.transform.RotateAround (anchor.transform.position, Vector3.up, -1.0f * anchor.transform.rotation.eulerAngles.y);
-		temp.transform.position = anchor.transform.position - temp.transform.position;
-		Vector3 offset = temp.transform.position;
+//		temp.transform.position = anchor.transform.position - temp.transform.position;
+//		Vector3 offset = temp.transform.position;
+		Vector3 offset = obj.transform.position - anchor.transform.position;
 
 		WWWForm form = new WWWForm ();
 		form.AddField("x", offset.x.ToString());
@@ -214,14 +215,16 @@ public class NetworkManager : MonoBehaviour {
 			if (objectMap.ContainsKey (objectId)) {
 				GameObject obj = objectMap [objectId];
 
-				GameObject temp = new GameObject ();
-				temp.transform.position = obj.transform.position + anchor.transform.position;
+//				GameObject temp = new GameObject ();
+//				temp.transform.position = obj.transform.position + anchor.transform.position;
 //				temp.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
-				Vector3 newPos = temp.transform.position;
+//				Vector3 newPos = temp.transform.position;
+//
+//				obj.transform.position = newPos;
 
-				obj.transform.position = newPos;
+				obj.transform.position = obj.transform.position + anchor.transform.position;
 			} else {
-				GameObject other = Instantiate (hitCubePrefab, anchor.transform.position + otherPos, Quaternion.identity);
+				GameObject other = Instantiate (hitCubePrefab, otherPos + anchor.transform.position, Quaternion.identity);
 //				other.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
 
 				objectMap.Add (objectId, other);
