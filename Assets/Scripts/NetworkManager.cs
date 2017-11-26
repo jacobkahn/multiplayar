@@ -128,7 +128,7 @@ public class NetworkManager : MonoBehaviour {
 //		Vector3 offset = OffsetFromAnchor (obj);
 		GameObject temp = new GameObject ();
 		temp.transform.position = obj.transform.position;
-		temp.transform.RotateAround (anchor.transform.position, Vector3.up, -1.0f * anchor.transform.rotation.eulerAngles.y);
+//		temp.transform.RotateAround (anchor.transform.position, Vector3.up, -1.0f * anchor.transform.rotation.eulerAngles.y);
 		temp.transform.position = anchor.transform.position - temp.transform.position;
 		Vector3 offset = temp.transform.position;
 
@@ -216,13 +216,13 @@ public class NetworkManager : MonoBehaviour {
 
 				GameObject temp = new GameObject ();
 				temp.transform.position = obj.transform.position + anchor.transform.position;
-				temp.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
+//				temp.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
 				Vector3 newPos = temp.transform.position;
 
 				obj.transform.position = newPos;
 			} else {
 				GameObject other = Instantiate (hitCubePrefab, anchor.transform.position + otherPos, Quaternion.identity);
-				other.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
+//				other.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
 
 				objectMap.Add (objectId, other);
 				reverseObjectMap.Add (other.GetInstanceID (), objectId);
