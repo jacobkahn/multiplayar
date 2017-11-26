@@ -125,6 +125,7 @@ public class NetworkManager : MonoBehaviour {
 	 * signals the server that this is a brand new object.
 	 */
 	public void SendObject(string objectId, GameObject obj) {
+
 //		Vector3 offset = OffsetFromAnchor (obj);
 //		GameObject temp = new GameObject ();
 //		temp.transform.position = obj.transform.position;
@@ -132,6 +133,9 @@ public class NetworkManager : MonoBehaviour {
 //		temp.transform.position = anchor.transform.position - temp.transform.position;
 //		Vector3 offset = temp.transform.position;
 		Vector3 offset = obj.transform.position - anchor.transform.position;
+
+		Debug.Log ("Sending update for Object: " + objectId);
+		Debug.Log ("Local Position: " + obj.transform.position + " World Position: " + offset.ToString());
 
 		WWWForm form = new WWWForm ();
 		form.AddField("x", offset.x.ToString());
@@ -212,8 +216,11 @@ public class NetworkManager : MonoBehaviour {
 			Vector3 otherPos = new Vector3 (v.x, v.y, v.z);
 
 
+
 			if (objectMap.ContainsKey (objectId)) {
 				GameObject obj = objectMap [objectId];
+
+				Debug.Log ("World Sync Object: " + objectId + " to position: " + otherPos.ToString ());
 
 //				GameObject temp = new GameObject ();
 //				temp.transform.position = obj.transform.position + anchor.transform.position;
@@ -222,7 +229,7 @@ public class NetworkManager : MonoBehaviour {
 //
 //				obj.transform.position = newPos;
 
-				obj.transform.position = obj.transform.position + anchor.transform.position;
+				obj.transform.position = otherPos + anchor.transform.position;
 			} else {
 				GameObject other = Instantiate (hitCubePrefab, otherPos + anchor.transform.position, Quaternion.identity);
 //				other.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);

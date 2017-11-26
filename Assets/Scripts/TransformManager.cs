@@ -21,9 +21,12 @@ public class TransformManager : MonoBehaviour {
 	}
 
 	void LateUpdate () {
-		if (transform.position != prevPosition && objectId.Length != 0) {
+		if (this.gameObject.transform.position != prevPosition && objectId.Length != 0) {
+
+			Debug.Log ("Transform Manager Position: " + this.gameObject.transform.position.ToString ());
+
 			nm.SendObject (objectId, this.gameObject);
-			prevPosition = transform.position;
+			prevPosition = this.gameObject.transform.position;
 		}
 	}
 }
