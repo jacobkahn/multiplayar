@@ -127,12 +127,12 @@ public class NetworkManager : MonoBehaviour {
 	public void SendObject(string objectId, GameObject obj) {
 
 //		Vector3 offset = OffsetFromAnchor (obj);
-//		GameObject temp = new GameObject ();
-//		temp.transform.position = obj.transform.position;
-//		temp.transform.RotateAround (anchor.transform.position, Vector3.up, -1.0f * anchor.transform.rotation.eulerAngles.y);
-//		temp.transform.position = anchor.transform.position - temp.transform.position;
-//		Vector3 offset = temp.transform.position;
-		Vector3 offset = obj.transform.position - anchor.transform.position;
+		GameObject temp = new GameObject ();
+		temp.transform.position = obj.transform.position;
+		temp.transform.RotateAround (anchor.transform.position, Vector3.up, -1.0f * anchor.transform.rotation.eulerAngles.y);
+		temp.transform.position = temp.transform.position - anchor.transform.position;
+		Vector3 offset = temp.transform.position;
+//		Vector3 offset = obj.transform.position - anchor.transform.position;
 
 		Debug.Log ("Sending update for Object: " + objectId);
 		Debug.Log ("Local Position: " + obj.transform.position + " World Position: " + offset.ToString());
@@ -222,17 +222,15 @@ public class NetworkManager : MonoBehaviour {
 
 				Debug.Log ("World Sync Object: " + objectId + " to position: " + otherPos.ToString ());
 
-//				GameObject temp = new GameObject ();
-//				temp.transform.position = obj.transform.position + anchor.transform.position;
-//				temp.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
-//				Vector3 newPos = temp.transform.position;
-//
-//				obj.transform.position = newPos;
+				GameObject temp = new GameObject ();
+				temp.transform.position = otherPos + anchor.transform.position;
+				temp.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
+				Vector3 newPos = temp.transform.position;
 
-				obj.transform.position = otherPos + anchor.transform.position;
+				obj.transform.position = newPos;
 			} else {
 				GameObject other = Instantiate (hitCubePrefab, otherPos + anchor.transform.position, Quaternion.identity);
-//				other.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
+				other.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
 
 				objectMap.Add (objectId, other);
 				reverseObjectMap.Add (other.GetInstanceID (), objectId);
