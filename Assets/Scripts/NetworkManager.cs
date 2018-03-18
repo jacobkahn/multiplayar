@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.Networking;
+using UnityEngine.XR.iOS;
 using UnityEngine;
 
 /* NetworkManager manages synchronization of all the objects 
@@ -9,9 +10,11 @@ using UnityEngine;
 public class NetworkManager : MonoBehaviour {
   
 	/** Server endpoints **/ 
-	public string address = "http://multiplayar.me";
-	public string anchorEndpoint = "/anchor";
+//	public string address = "http://multiplayar.me";
+	public string address = "http://d65bbe5b.ngrok.io";
+	public string anchorEndpoint  = "/anchor";
 	public string objectEndpoint = "/object";
+	public string imageEndpoint = "/image";
 	public string syncEndpoint = "/sync";
 
 	public Dictionary<string, GameObject> objectMap = new Dictionary<string, GameObject>();
@@ -58,7 +61,7 @@ public class NetworkManager : MonoBehaviour {
 	
 	void Update () {
 		frames++;
-		if (frames % 120 == 0) {
+		if (frames % 10 == 0) {
 			SyncWorld ();
 			frames = 0;
 		}
@@ -86,6 +89,59 @@ public class NetworkManager : MonoBehaviour {
 		Vector3 offset = anchorPos - objPos;
 		return offset;
 	}
+
+	public void testScreenshot() {
+		Debug.Log ("Sending a new screenshot!");
+		StartCoroutine (captureCameraView());
+	}
+
+
+	public IEnumerator captureCameraView() {
+		int height = Screen.height;
+		int width = Screen.width;
+
+		// create a texture to render the camera's view to
+		RenderTexture texture = new RenderTexture (width, height, 24);
+
+		// alternatively use textures from the main camera
+		Camera cam = mainCamera.GetComponentInChildren<Camera>();
+		int prevMask = cam.cullingMask;
+		cam.cullingMask = 0;
+		RenderTexture prevTexture = cam.targetTexture;
+		cam.targetTexture = texture;
+		cam.Render ();
+
+		// read the texture into a static texture2D
+		RenderTexture.active = texture; // make the global render texture this one
+		Texture2D savedTexture = new Texture2D(width, height, TextureFormat.RGB24, false);
+		savedTexture.ReadPixels (new Rect (0, 0, width, height), 0, 0);
+		savedTexture.Apply();
+		RenderTexture.active = null; // release the static reference
+
+		// once done, restore the main camera
+		cam.cullingMask = prevMask;
+		cam.targetTexture = prevTexture;
+
+		// send this image to a server
+		Debug.Log("Sending to the server");
+		WWWForm form = new WWWForm();
+		byte[] raw_image_bytes;
+		raw_image_bytes = savedTexture.EncodeToPNG();
+		Debug.Log ("Writing " + raw_image_bytes.Length);
+		form.AddBinaryData ("image", raw_image_bytes);
+		WWW w = new WWW (address + imageEndpoint, raw_image_bytes);
+		Debug.Log("Sent the request");
+		yield return w;
+
+		Debug.Log ("Response has returned");
+		if (w.error != null) {
+			Debug.Log (w.error);
+		} else {
+			Debug.Log ("IMAGE SUCCESFULLY UPLOADED");
+		}
+
+	}
+
   
 	/*
 	 */

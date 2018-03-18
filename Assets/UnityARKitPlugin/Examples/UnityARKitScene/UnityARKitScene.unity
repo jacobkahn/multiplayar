@@ -188,7 +188,7 @@ Camera:
   m_TargetDisplay: 0
   m_TargetEye: 3
   m_HDR: 0
-  m_AllowMSAA: 1
+  m_AllowMSAA: 0
   m_ForceIntoRT: 0
   m_OcclusionCulling: 1
   m_StereoConvergence: 10
@@ -508,7 +508,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 294771742}
-        m_MethodName: SendOffset
+        m_MethodName: testScreenshot
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -853,6 +853,11 @@ Prefab:
       propertyPath: anchor
       value: 
       objectReference: {fileID: 1286139107}
+    - target: {fileID: 114398187186068780, guid: ec433b654384e48b2bcce4f5793e27ae,
+        type: 2}
+      propertyPath: address
+      value: http://d65bbe5b.ngrok.io
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_ParentPrefab: {fileID: 100100000, guid: ec433b654384e48b2bcce4f5793e27ae, type: 2}
   m_IsPrefabParent: 0
