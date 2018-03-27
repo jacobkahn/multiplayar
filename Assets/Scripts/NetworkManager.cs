@@ -1,8 +1,10 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.Serialization.Formatters.Binary;
 using UnityEngine.Networking;
 using UnityEngine.XR.iOS;
 using UnityEngine;
+
 
 /* NetworkManager manages synchronization of all the objects 
  * in the scene and communicating with the server
@@ -10,8 +12,7 @@ using UnityEngine;
 public class NetworkManager : MonoBehaviour {
   
 	/** Server endpoints **/ 
-//	public string address = "http://multiplayar.me";
-	public string address = "http://d65bbe5b.ngrok.io";
+	public string address = "http://multiplayar.me";
 	public string anchorEndpoint  = "/anchor";
 	public string objectEndpoint = "/object";
 	public string imageEndpoint = "/image";
@@ -22,12 +23,41 @@ public class NetworkManager : MonoBehaviour {
 	public GameObject mainCamera;
 	public GameObject hitCubePrefab;
 	public GameObject anchor;
+	public Transform m_HitTransform;
+	public List<Vector3> matchpoints;
+	public List<GameObject> targets;
 
+	private bool anchorSelect = false;
+
+	private string guid;
 	private string userId;
 	private bool synced; 
 	private GameObject newCube;
 	private int frames;
 
+	private Sprite unselected;
+	private Sprite selected;
+
+
+	[System.Serializable] 
+	public class PointInformation {
+		public float x;
+		public float y;
+
+		public PointInformation(float x, float y) {
+			this.x = x;
+			this.y = y;
+		}
+	}
+
+	[System.Serializable] 
+	public class MatchedPoints {
+		public List<PointInformation> points;
+
+		public static MatchedPoints CreateFromJSON (string j) {
+			return JsonUtility.FromJson<MatchedPoints> (j);
+		}
+	}
 
 	[System.Serializable] 
 	public class VectorInformation {
@@ -57,6 +87,16 @@ public class NetworkManager : MonoBehaviour {
 		userId = "";
 		frames = 0;
 		synced = false;
+		guid = System.Guid.NewGuid().ToString();
+		matchpoints = new List<Vector3> ();
+		targets = new List<GameObject> ();
+		SpriteRenderer unselectedR = GameObject.Find ("Unselected").GetComponent<SpriteRenderer> ();
+		unselectedR.enabled = false;
+		unselected = unselectedR.sprite;
+		SpriteRenderer selectedR = GameObject.Find ("Selected").GetComponent<SpriteRenderer> ();
+		selectedR.enabled = false;
+		selected = selectedR.sprite;
+		anchorSelect = true;
 	}
 	
 	void Update () {
@@ -65,7 +105,30 @@ public class NetworkManager : MonoBehaviour {
 			SyncWorld ();
 			frames = 0;
 		}
+
+		if (!anchorSelect) {
+			foreach (GameObject t in targets) {
+//				Vector3 screenpos = mainCamera.GetComponentInChildren<Camera> ().WorldToScreenPoint(pos);
+//				int dim = 64;
+//				float x = screenpos.x;
+//				float y = screenpos.y;
+//				GUI.DrawTexture (new Rect(x, y, dim, dim), unselected, ScaleMode.ScaleToFit, true);
+				t.transform.LookAt(mainCamera.transform, -Vector3.up);
+			}
+
+			if (Input.touchCount > 0 && Input.GetTouch (0).phase == TouchPhase.Began) 
+			{
+				Ray ray = Camera.main.ScreenPointToRay( Input.GetTouch(0).position );
+				RaycastHit hit;
+
+				if ( Physics.Raycast(ray, out hit) && hit.transform.gameObject.name.StartsWith("target"))
+				{
+					hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = selected;
+				}
+			}
+		}
 	}
+
 		 
 	/* Each GameObject has an associated server-assigned string objectId. 
 	 * The reverseObjectMap maps instanceId to objectId, and is thus used 
@@ -96,9 +159,18 @@ public class NetworkManager : MonoBehaviour {
 	}
 
 
+
 	public IEnumerator captureCameraView() {
+
+
 		int height = Screen.height;
 		int width = Screen.width;
+
+		PointInformation fakePoint = new PointInformation(width / 2.0f, height / 2.0f);
+		Debug.Log ("making a fake point");
+		drawServerPoint (fakePoint, 1);
+		anchorSelect = false;
+		yield break;
 
 		// create a texture to render the camera's view to
 		RenderTexture texture = new RenderTexture (width, height, 24);
@@ -124,22 +196,92 @@ public class NetworkManager : MonoBehaviour {
 
 		// send this image to a server
 		Debug.Log("Sending to the server");
-		WWWForm form = new WWWForm();
+//		WWWForm form = new WWWForm();
 		byte[] raw_image_bytes;
 		raw_image_bytes = savedTexture.EncodeToPNG();
 		Debug.Log ("Writing " + raw_image_bytes.Length);
-		form.AddBinaryData ("image", raw_image_bytes);
-		WWW w = new WWW (address + imageEndpoint, raw_image_bytes);
+//		form.AddBinaryData ("image", raw_image_bytes);
+		Dictionary<string, string> headers = new Dictionary<string, string> ();
+		headers.Add ("x-user-id", guid);
+		headers.Add ("x-dummy-id", "fucapplr");
+//		form.AddField("image", System.Convert.ToBase64String(raw_image_bytes));
+//		form.AddField ("id", "1"); 
+		WWW w = new WWW (address + imageEndpoint, raw_image_bytes, headers);
 		Debug.Log("Sent the request");
-		yield return w;
+		yield return w; 
 
 		Debug.Log ("Response has returned");
 		if (w.error != null) {
 			Debug.Log (w.error);
 		} else {
-			Debug.Log ("IMAGE SUCCESFULLY UPLOADED");
+			Debug.Log ("IMAGE POINTS RETRIEVED FROM THE SERVER");
+			MatchedPoints points = MatchedPoints.CreateFromJSON (w.text);
+			int i = 1;
+			foreach (PointInformation point in points.points) {
+				Debug.Log ("POINT x: " + point.x + " y: " + point.y);
+				drawServerPoint (point, i);
+				i++;
+			}
+
 		}
 
+
+	}
+
+
+	public void drawServerPoint(PointInformation point, int index) {
+		Vector2 pointVector = new Vector2 (point.x, point.y);
+		var screenPosition = Camera.main.ScreenToViewportPoint(pointVector);
+		ARPoint arPoint = new ARPoint {
+			x = screenPosition.x,
+			y = screenPosition.y
+		};
+
+		// prioritize reults types
+		ARHitTestResultType[] resultTypes = {
+			ARHitTestResultType.ARHitTestResultTypeExistingPlaneUsingExtent, 
+			// if you want to use infinite planes use this:
+			//ARHitTestResultType.ARHitTestResultTypeExistingPlane,
+			ARHitTestResultType.ARHitTestResultTypeHorizontalPlane, 
+			ARHitTestResultType.ARHitTestResultTypeFeaturePoint
+		}; 
+
+		foreach (ARHitTestResultType resultType in resultTypes)
+		{
+			if (HitTestWithResultType (arPoint, resultType, index))
+			{
+				return;
+			}
+		}
+		// if it failed, try again
+//		drawServerPoint (point);
+	}
+
+	bool HitTestWithResultType (ARPoint point, ARHitTestResultType resultTypes, int index)
+	{
+		List<ARHitTestResult> hitResults = UnityARSessionNativeInterface.GetARSessionNativeInterface ().HitTest (point, resultTypes);
+		Debug.Log ("FAKE NEWS");
+		Debug.Log (hitResults.Count);
+		if (hitResults.Count > 0) {
+			foreach (var hitResult in hitResults) {
+//				m_HitTransform.position = UnityARMatrixOps.GetPosition (hitResult.worldTransform);
+//				m_HitTransform.rotation = UnityARMatrixOps.GetRotation (hitResult.worldTransform);
+				Vector3 position = UnityARMatrixOps.GetPosition (hitResult.worldTransform);
+				matchpoints.Add (position);
+				GameObject target = new GameObject ();
+				target.name = "target" + index;
+				SpriteRenderer r = target.AddComponent<SpriteRenderer> ();
+				r.sprite = unselected;
+				r.enabled = true;
+				target.transform.position = position;
+//				target.transform.localRotation = Quaternion.LookRotation (mainCamera.transform.position - position);
+				target.transform.localScale = new Vector3 (0.02f, 0.02f, 0.02f);
+				targets.Add (target);
+//				Debug.Log (string.Format ("FAKE POINT x:{0:0.######} y:{1:0.######} z:{2:0.######}", m_HitTransform.position.x, m_HitTransform.position.y, m_HitTransform.position.z));
+				return true;
+			}
+		}
+		return false;
 	}
 
   
