@@ -26,17 +26,24 @@ public class NetworkManager : MonoBehaviour {
 	public Transform m_HitTransform;
 	public List<Vector3> matchpoints;
 	public List<GameObject> targets;
-
+	public List<bool> targetselected;
+	private Dictionary<Vector2, Vector3> hitPointMap = new Dictionary<Vector2, Vector3> ();
+					
 	private bool anchorSelect = false;
+	private bool anchorChosen = false;
 
 	private string guid;
 	private string userId;
 	private bool synced; 
 	private GameObject newCube;
 	private int frames;
+	private bool lockPoints = false;
 
 	private Sprite unselected;
 	private Sprite selected;
+	private Vector3[] pointClouds;
+
+	private string pointformat = "{0:0.000},{1:0.000}";
 
 
 	[System.Serializable] 
@@ -97,6 +104,15 @@ public class NetworkManager : MonoBehaviour {
 		selectedR.enabled = false;
 		selected = selectedR.sprite;
 		anchorSelect = true;
+		targetselected = new List<bool> ();
+		UnityARSessionNativeInterface.ARFrameUpdatedEvent += ARFrameUpdated;
+
+	}
+
+	public void ARFrameUpdated(UnityARCamera camera) {
+		if (!lockPoints) {
+			pointClouds = camera.pointCloudData;
+		}
 	}
 	
 	void Update () {
@@ -120,11 +136,34 @@ public class NetworkManager : MonoBehaviour {
 			{
 				Ray ray = Camera.main.ScreenPointToRay( Input.GetTouch(0).position );
 				RaycastHit hit;
+			
+//				&& hit.transform.gameObject.name.StartsWith("target")
 
-				if ( Physics.Raycast(ray, out hit) && hit.transform.gameObject.name.StartsWith("target"))
+				if ( Physics.Raycast(ray, out hit) && hit.transform.gameObject.name.StartsWith("target") )
 				{
-					hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = selected;
+					int index; 
+					int.TryParse (hit.transform.gameObject.name.Substring(6), out index);
+					Debug.Log (hit.transform.gameObject.name.Substring (6));
+					if (targetselected [index]) {
+						hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = unselected;
+						targetselected [index] = false;
+					} else {
+						hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = selected; 
+						anchorChosen = true;
+						anchor = hit.transform.gameObject;
+						SendOffset ();
+						// TODO: unselect the rest
+						for (int i = 0; i < targets.Count; i++) {
+							GameObject other = targets [i];
+							if (i != index) {
+								other.SetActive (false);
+							}
+						}
+						targetselected [index] = true;
+					}
+
 				}
+
 			}
 		}
 	}
@@ -166,10 +205,16 @@ public class NetworkManager : MonoBehaviour {
 		int height = Screen.height;
 		int width = Screen.width;
 
-		PointInformation fakePoint = new PointInformation(width / 2.0f, height / 2.0f);
-		Debug.Log ("making a fake point");
-		drawServerPoint (fakePoint, 1);
-		anchorSelect = false;
+		Camera tempCam = mainCamera.GetComponentInChildren<Camera>();
+		for (int i = 0; i < Mathf.Min (4, pointClouds.Length); i++) {
+			Vector3 testPoint = pointClouds [i];
+			Vector3 screenPos = tempCam.WorldToScreenPoint (testPoint);
+			hitPointMap.Add (new Vector2(screenPos.x, screenPos.y), testPoint);
+			PointInformation fakePoint = new PointInformation(screenPos.x, screenPos.y);
+			Debug.Log ("making a fake point");
+			drawServerPoint (fakePoint, i);
+			anchorSelect = false;
+		}
 		yield break;
 
 		// create a texture to render the camera's view to
@@ -204,6 +249,8 @@ public class NetworkManager : MonoBehaviour {
 		Dictionary<string, string> headers = new Dictionary<string, string> ();
 		headers.Add ("x-user-id", guid);
 		headers.Add ("x-dummy-id", "fucapplr");
+		headers.Add ("x-points", serializeARKitPoints());
+
 //		form.AddField("image", System.Convert.ToBase64String(raw_image_bytes));
 //		form.AddField ("id", "1"); 
 		WWW w = new WWW (address + imageEndpoint, raw_image_bytes, headers);
@@ -216,73 +263,138 @@ public class NetworkManager : MonoBehaviour {
 		} else {
 			Debug.Log ("IMAGE POINTS RETRIEVED FROM THE SERVER");
 			MatchedPoints points = MatchedPoints.CreateFromJSON (w.text);
-			int i = 1;
+			Debug.Log (points.points.Count);
+			int i = 0;
 			foreach (PointInformation point in points.points) {
 				Debug.Log ("POINT x: " + point.x + " y: " + point.y);
 				drawServerPoint (point, i);
 				i++;
 			}
-
 		}
+	}
 
-
+	public string serializeARKitPoints() {
+		lockPoints = true;
+		string serialized = "";
+		Camera cam = mainCamera.GetComponentInChildren<Camera> ();
+		foreach (Vector3 point in pointClouds) {
+			Vector3 screenPos = cam.WorldToScreenPoint (point);
+//			string key = string.Format (pointformat, screenPos.x, screenPos.y);
+			serialized += string.Format ("{0:0.000},{1:0.000};", screenPos.x, screenPos.y);
+			hitPointMap.Add (new Vector2(screenPos.x, screenPos.y), screenPos);
+		}
+		lockPoints = false;
+		return serialized.Substring(0, serialized.Length - 1);
 	}
 
 
 	public void drawServerPoint(PointInformation point, int index) {
 		Vector2 pointVector = new Vector2 (point.x, point.y);
-		var screenPosition = Camera.main.ScreenToViewportPoint(pointVector);
-		ARPoint arPoint = new ARPoint {
-			x = screenPosition.x,
-			y = screenPosition.y
-		};
+//		string key = string.Format (pointformat, pointVector.x, pointVector.y);
+		Vector3 anchorposition; 
 
-		// prioritize reults types
-		ARHitTestResultType[] resultTypes = {
-			ARHitTestResultType.ARHitTestResultTypeExistingPlaneUsingExtent, 
-			// if you want to use infinite planes use this:
-			//ARHitTestResultType.ARHitTestResultTypeExistingPlane,
-			ARHitTestResultType.ARHitTestResultTypeHorizontalPlane, 
-			ARHitTestResultType.ARHitTestResultTypeFeaturePoint
-		}; 
-
-		foreach (ARHitTestResultType resultType in resultTypes)
-		{
-			if (HitTestWithResultType (arPoint, resultType, index))
-			{
-				return;
+		foreach (KeyValuePair<Vector2, Vector3> val in hitPointMap) {
+			Vector2 mapPoint = val.Key;
+			bool matched = false;
+			if (mapPoint.Equals (pointVector)) {
+				matched = true;
 			}
-		}
-		// if it failed, try again
-//		drawServerPoint (point);
-	}
 
-	bool HitTestWithResultType (ARPoint point, ARHitTestResultType resultTypes, int index)
-	{
-		List<ARHitTestResult> hitResults = UnityARSessionNativeInterface.GetARSessionNativeInterface ().HitTest (point, resultTypes);
-		Debug.Log ("FAKE NEWS");
-		Debug.Log (hitResults.Count);
-		if (hitResults.Count > 0) {
-			foreach (var hitResult in hitResults) {
-//				m_HitTransform.position = UnityARMatrixOps.GetPosition (hitResult.worldTransform);
-//				m_HitTransform.rotation = UnityARMatrixOps.GetRotation (hitResult.worldTransform);
-				Vector3 position = UnityARMatrixOps.GetPosition (hitResult.worldTransform);
-				matchpoints.Add (position);
+			if (matched) {
+				Debug.Log ("Found point!");
+				anchorposition = val.Value;
+				Debug.Log (anchorposition.ToString ());
+				matchpoints.Add (anchorposition);
 				GameObject target = new GameObject ();
 				target.name = "target" + index;
 				SpriteRenderer r = target.AddComponent<SpriteRenderer> ();
+				target.AddComponent<BoxCollider> ();
+				targetselected.Add (false);
 				r.sprite = unselected;
 				r.enabled = true;
-				target.transform.position = position;
-//				target.transform.localRotation = Quaternion.LookRotation (mainCamera.transform.position - position);
-				target.transform.localScale = new Vector3 (0.02f, 0.02f, 0.02f);
+				target.transform.position = anchorposition;
+				target.transform.localScale = new Vector3 (0.05f, 0.05f, 0.05f);
 				targets.Add (target);
-//				Debug.Log (string.Format ("FAKE POINT x:{0:0.######} y:{1:0.######} z:{2:0.######}", m_HitTransform.position.x, m_HitTransform.position.y, m_HitTransform.position.z));
-				return true;
+				break;
 			}
 		}
-		return false;
+
+//		if (hitPointMap.TryGetValue (key, out anchorposition)) {
+//			matchpoints.Add (anchorposition);
+//			GameObject target = new GameObject ();
+//			target.name = "target" + index;
+//			SpriteRenderer r = target.AddComponent<SpriteRenderer> ();
+//			target.AddComponent<BoxCollider> ();
+//			targetselected.Add (false);
+//			r.sprite = unselected;
+//			r.enabled = true;
+//			target.transform.position = anchorposition;
+//			target.transform.localScale = new Vector3 (0.02f, 0.02f, 0.02f);
+//			targets.Add (target);
+//		} else {
+//			Debug.Log ("didn't find any matches in the hitpointmap");
+//			foreach (KeyValuePair<string, Vector3> val in hitPointMap) {
+//				Debug.Log (val.Key);
+//				Debug.Log (key.Equals (val.Key));
+//			}
+//		}
+
+		return;
 	}
+//		var screenPosition = Camera.main.ScreenToViewportPoint(pointVector);
+//		ARPoint arPoint = new ARPoint {
+//			x = screenPosition.x,
+//			y = screenPosition.y
+//		};
+//
+//		// prioritize reults types
+//		ARHitTestResultType[] resultTypes = {
+//			ARHitTestResultType.ARHitTestResultTypeExistingPlaneUsingExtent, 
+//			// if you want to use infinite planes use this:
+//			//ARHitTestResultType.ARHitTestResultTypeExistingPlane,
+//			ARHitTestResultType.ARHitTestResultTypeHorizontalPlane, 
+//			ARHitTestResultType.ARHitTestResultTypeFeaturePoint
+//		}; 
+//
+//		foreach (ARHitTestResultType resultType in resultTypes)
+//		{
+//			if (HitTestWithResultType (arPoint, resultType, index))
+//			{
+//				return;
+//			}
+//		}
+		// if it failed, try again
+//		drawServerPoint (point);
+//	}
+
+//	bool HitTestWithResultType (ARPoint point, ARHitTestResultType resultTypes, int index)
+//	{
+//		List<ARHitTestResult> hitResults = UnityARSessionNativeInterface.GetARSessionNativeInterface ().HitTest (point, resultTypes);
+//		Debug.Log ("FAKE NEWS");
+//		Debug.Log (hitResults.Count);
+//		if (hitResults.Count > 0) {
+//			foreach (var hitResult in hitResults) {
+////				m_HitTransform.position = UnityARMatrixOps.GetPosition (hitResult.worldTransform);
+////				m_HitTransform.rotation = UnityARMatrixOps.GetRotation (hitResult.worldTransform);
+//				Vector3 position = UnityARMatrixOps.GetPosition (hitResult.worldTransform);
+//				matchpoints.Add (position);
+//				GameObject target = new GameObject ();
+//				target.name = "target" + index;
+//				SpriteRenderer r = target.AddComponent<SpriteRenderer> ();
+//				target.AddComponent<BoxCollider> ();
+//				targetselected.Add (false);
+//				r.sprite = unselected;
+//				r.enabled = true;
+//				target.transform.position = position;
+////				target.transform.localRotation = Quaternion.LookRotation (mainCamera.transform.position - position);
+//				target.transform.localScale = new Vector3 (0.02f, 0.02f, 0.02f);
+//				targets.Add (target);
+////				Debug.Log (string.Format ("FAKE POINT x:{0:0.######} y:{1:0.######} z:{2:0.######}", m_HitTransform.position.x, m_HitTransform.position.y, m_HitTransform.position.z));
+//				return true;
+//			}
+//		}
+//		return false;
+//	}
 
   
 	/*
@@ -351,6 +463,9 @@ public class NetworkManager : MonoBehaviour {
 	/* Get state of the world from server
 	 */
 	public void SyncWorld() {
+		if (!anchorChosen) {
+			return;
+		}
 		WWW www = new WWW (address + syncEndpoint);
 		StartCoroutine (WaitForWorldSync (www));
 	}
