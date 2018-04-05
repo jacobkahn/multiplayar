@@ -4,6 +4,7 @@ using System.Runtime.Serialization.Formatters.Binary;
 using UnityEngine.Networking;
 using UnityEngine.XR.iOS;
 using UnityEngine;
+using UnityEngine.UI;
 
 
 /* NetworkManager manages synchronization of all the objects 
@@ -17,6 +18,8 @@ public class NetworkManager : MonoBehaviour {
 	public string objectEndpoint = "/object";
 	public string imageEndpoint = "/image";
 	public string syncEndpoint = "/sync";
+  
+  public bool DEBUG = false;
 
 	public Dictionary<string, GameObject> objectMap = new Dictionary<string, GameObject>();
 	public Dictionary<int, string> reverseObjectMap = new Dictionary<int, string> ();
@@ -38,12 +41,15 @@ public class NetworkManager : MonoBehaviour {
 	private GameObject newCube;
 	private int frames;
 	private bool lockPoints = false;
+  
+  private string syncButtonGameObjectName = "SyncButton";
+  private bool readyToSync = false;
 
 	private Sprite unselected;
 	private Sprite selected;
 	private Vector3[] pointClouds;
 
-	private string pointformat = "{0:0.000},{1:0.000}";
+	// private string pointformat = "{0:0.000},{1:0.000}";
 
 
 	[System.Serializable] 
@@ -106,10 +112,25 @@ public class NetworkManager : MonoBehaviour {
 		anchorSelect = true;
 		targetselected = new List<bool> ();
 		UnityARSessionNativeInterface.ARFrameUpdatedEvent += ARFrameUpdated;
-
+    // find the button (if it exists)
+    setButtonText("Wait");
 	}
+  
+  public void setButtonText(string value) {
+    GameObject button = GameObject.Find(syncButtonGameObjectName);
+    if (button != null) {
+      Text text = GetComponentInChildren<Text>();
+      if (text != null) {
+        text.text = value;
+      }
+    }
+  }
 
 	public void ARFrameUpdated(UnityARCamera camera) {
+    if (readyToSync == false) {
+      readyToSync = true;
+      setButtonText("Sync");
+    }
 		if (!lockPoints) {
 			pointClouds = camera.pointCloudData;
 		}
@@ -198,14 +219,8 @@ public class NetworkManager : MonoBehaviour {
 	}
 
 
-
-	public IEnumerator captureCameraView() {
-
-
-		int height = Screen.height;
-		int width = Screen.width;
-
-		Camera tempCam = mainCamera.GetComponentInChildren<Camera>();
+  public void debugServerPoints(int height, int width) {
+    Camera tempCam = mainCamera.GetComponentInChildren<Camera>();
 		for (int i = 0; i < Mathf.Min (4, pointClouds.Length); i++) {
 			Vector3 testPoint = pointClouds [i];
 			Vector3 screenPos = tempCam.WorldToScreenPoint (testPoint);
@@ -215,7 +230,20 @@ public class NetworkManager : MonoBehaviour {
 			drawServerPoint (fakePoint, i);
 			anchorSelect = false;
 		}
-		yield break;
+  }
+
+	public IEnumerator captureCameraView() {
+
+
+		int height = Screen.height;
+		int width = Screen.width;
+
+    // DEBUG code below that chooses the first 4 AR points and uses them to the sync up
+    // to the rest of the existing multiplayar system
+		if (DEBUG == true) {
+      debugServerPoints(height, width);
+      yield break;
+    }
 
 		// create a texture to render the camera's view to
 		RenderTexture texture = new RenderTexture (width, height, 24);
@@ -280,8 +308,11 @@ public class NetworkManager : MonoBehaviour {
 		foreach (Vector3 point in pointClouds) {
 			Vector3 screenPos = cam.WorldToScreenPoint (point);
 //			string key = string.Format (pointformat, screenPos.x, screenPos.y);
-			serialized += string.Format ("{0:0.000},{1:0.000};", screenPos.x, screenPos.y);
-			hitPointMap.Add (new Vector2(screenPos.x, screenPos.y), screenPos);
+      string pointStringX = string.Format ("{0:0.000}", screenPos.x);
+      string pointStringY = string.Format ("{0:0.000}", screenPos.y);
+      string pointString = string.Format("{0},{1};", pointStringX, pointStringY);
+			serialized += pointString;
+			hitPointMap.Add (new Vector2(float.Parse(pointStringX), float.Parse(pointStringY)), point);
 		}
 		lockPoints = false;
 		return serialized.Substring(0, serialized.Length - 1);
@@ -293,9 +324,9 @@ public class NetworkManager : MonoBehaviour {
 //		string key = string.Format (pointformat, pointVector.x, pointVector.y);
 		Vector3 anchorposition; 
 
+    bool matched = false;
 		foreach (KeyValuePair<Vector2, Vector3> val in hitPointMap) {
 			Vector2 mapPoint = val.Key;
-			bool matched = false;
 			if (mapPoint.Equals (pointVector)) {
 				matched = true;
 			}
@@ -318,6 +349,11 @@ public class NetworkManager : MonoBehaviour {
 				break;
 			}
 		}
+    
+    if (!matched) {
+        Debug.Log("No local match found for the server point");
+        Debug.Log(pointVector);
+    }
 
 //		if (hitPointMap.TryGetValue (key, out anchorposition)) {
 //			matchpoints.Add (anchorposition);
