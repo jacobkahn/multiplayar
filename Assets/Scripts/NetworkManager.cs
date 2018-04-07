@@ -116,13 +116,17 @@ public class NetworkManager : MonoBehaviour {
     setButtonText("Wait");
 	}
   
-  public void setButtonText(string value) {
+  public void setButtonText(string setText) {
     GameObject button = GameObject.Find(syncButtonGameObjectName);
     if (button != null) {
-      Text text = GetComponentInChildren<Text>();
+      Text text = button.GetComponentInChildren<Text>(true);
       if (text != null) {
-        text.text = value;
+        text.text = setText;
+      } else {
+        Debug.Log("Button has no text component!");
       }
+    } else {
+      Debug.Log("No sync button found!");
     }
   }
 
