@@ -7,10 +7,6 @@ namespace UnityEngine.XR.iOS
 	{
 		public Transform m_HitTransform;
 
-		void Start() {
-			Debug.Log ("Fuc applr");
-		} 
-
         bool HitTestWithResultType (ARPoint point, ARHitTestResultType resultTypes)
         {
             List<ARHitTestResult> hitResults = UnityARSessionNativeInterface.GetARSessionNativeInterface ().HitTest (point, resultTypes);
@@ -19,7 +15,7 @@ namespace UnityEngine.XR.iOS
 
                     m_HitTransform.position = UnityARMatrixOps.GetPosition (hitResult.worldTransform);
                     m_HitTransform.rotation = UnityARMatrixOps.GetRotation (hitResult.worldTransform);
-                    Debug.Log (string.Format ("x:{0:0.######} y:{1:0.######} z:{2:0.######}", m_HitTransform.position.x, m_HitTransform.position.y, m_HitTransform.position.z));
+                    // Debug.Log (string.Format ("x:{0:0.######} y:{1:0.######} z:{2:0.######}", m_HitTransform.position.x, m_HitTransform.position.y, m_HitTransform.position.z));
                     return true;
                 }
             }

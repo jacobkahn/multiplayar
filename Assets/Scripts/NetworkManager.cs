@@ -7,30 +7,31 @@ using UnityEngine;
 using UnityEngine.UI;
 
 
-/* NetworkManager manages synchronization of all the objects 
+/* NetworkManager manages synchronization of all the objects
  * in the scene and communicating with the server
  */
 public class NetworkManager : MonoBehaviour {
-  
-	/** Server endpoints **/ 
+
+	/** Server endpoints **/
 	public string address = "http://multiplayar.me";
 	public string pointPollEndpoint = "/pointpoll";
 	public string anchorEndpoint  = "/anchor";
 	public string objectEndpoint = "/object";
 	public string imageEndpoint = "/image";
 	public string syncEndpoint = "/sync";
-  
+
 	private bool DEBUG = false;
 
 	public Dictionary<string, GameObject> objectMap = new Dictionary<string, GameObject>();
 	public Dictionary<int, string> reverseObjectMap = new Dictionary<int, string> ();
 	public GameObject mainCamera;
-	public GameObject hitCubePrefab;
-	public GameObject anchor;
-	public Transform m_HitTransform;
-	public List<Vector3> matchpoints;
-	public List<GameObject> targets;
-	public List<bool> targetselected;
+	public GameObject multiplayerObjectPrefabOne;
+  public GameObject multiplayerObjectPrefabTwo;
+  public GameObject electricOrbPrefab;
+  private GameObject anchor;
+	private List<Vector3> matchpoints;
+	private List<GameObject> targets;
+	private List<bool> targetselected;
 	private Dictionary<Vector2, Vector3> hitPointMap = new Dictionary<Vector2, Vector3> ();
 	private Dictionary<Vector3, Vector2> reverseHitPointMap = new Dictionary<Vector3, Vector2> ();
 
@@ -39,11 +40,11 @@ public class NetworkManager : MonoBehaviour {
 
 	private string guid;
 	private string userId;
-	private bool synced; 
-	private GameObject newCube;
+	private bool synced;
+	private GameObject multiplayerObject;
 	private int frames;
 	private bool lockPoints = false;
-	private bool pollForAnchor = false; 
+	private bool pollForAnchor = false;
 
 	private string syncButtonGameObjectName = "SyncButton";
 	private bool readyToSync = false;
@@ -53,7 +54,7 @@ public class NetworkManager : MonoBehaviour {
 	private Vector3[] pointClouds;
 
 
-	[System.Serializable] 
+	[System.Serializable]
 	public class PointInformation {
 		public float x;
 		public float y;
@@ -68,7 +69,7 @@ public class NetworkManager : MonoBehaviour {
 		}
 	}
 
-	[System.Serializable] 
+	[System.Serializable]
 	public class MatchedPoints {
 		public List<PointInformation> points;
 
@@ -77,7 +78,7 @@ public class NetworkManager : MonoBehaviour {
 		}
 	}
 
-	[System.Serializable] 
+	[System.Serializable]
 	public class VectorInformation {
 		public float x;
 		public float y;
@@ -90,12 +91,12 @@ public class NetworkManager : MonoBehaviour {
 	public class RootObject {
 		public List<VectorInformation> users;
 		public List<VectorInformation> objects;
-	
+
 		public static RootObject CreateFromJSON (string j) {
 			return JsonUtility.FromJson<RootObject> (j);
 		}
 	}
-		
+
 	void Start () {
 		Debug.Log("Network Manager started with a connection to " + address);
 		userId = "";
@@ -116,7 +117,7 @@ public class NetworkManager : MonoBehaviour {
     	// find the button (if it exists)
   	  	setButtonText("Wait");
 	}
-  
+
   	public void setButtonText(string setText) {
 	    GameObject button = GameObject.Find(syncButtonGameObjectName);
 	    if (button != null) {
@@ -141,7 +142,7 @@ public class NetworkManager : MonoBehaviour {
 			pointClouds = camera.pointCloudData;
 		}
 	}
-	
+
 	void Update () {
 		frames++;
 		if (frames % 10 == 0) {
@@ -157,42 +158,58 @@ public class NetworkManager : MonoBehaviour {
 				t.transform.LookAt(mainCamera.transform, -Vector3.up);
 			}
 
-			if (Input.touchCount > 0 && Input.GetTouch (0).phase == TouchPhase.Began) 
+			if (Input.touchCount > 0 && Input.GetTouch (0).phase == TouchPhase.Began)
 			{
 				Ray ray = Camera.main.ScreenPointToRay( Input.GetTouch(0).position );
 				RaycastHit hit;
-			
-				if ( Physics.Raycast(ray, out hit) && hit.transform.gameObject.name.StartsWith("target") )
-				{
-					int index; 
-					int.TryParse (hit.transform.gameObject.name.Substring(6), out index);
-					Debug.Log (hit.transform.gameObject.name.Substring (6));
-					if (targetselected [index]) {
-						hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = unselected;
-						targetselected [index] = false;
-					} else {
-						hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = selected; 
-						anchorChosen = true;
-						anchor = hit.transform.gameObject;
-						SendSelectedAnchor2D ();
 
-						for (int i = 0; i < targets.Count; i++) {
-							GameObject other = targets [i];
-							if (i != index) {
-								other.SetActive (false);
-							}
-						}
-						targetselected [index] = true;
-					}
+				if ( Physics.Raycast(ray, out hit)) {
+          if (hit.transform.gameObject.name.StartsWith("target") ) {
+            int index;
+            int.TryParse (hit.transform.gameObject.name.Substring(6), out index);
+            Debug.Log (hit.transform.gameObject.name.Substring (6));
+            if (targetselected [index]) {
+              // deselect anchor
+              // hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = unselected;
+              targetselected [index] = false;
+            } else {
+              // select anchor
+              // hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = selected;
+              anchorChosen = true;
+              anchor = hit.transform.gameObject;
+              SendSelectedAnchor2D ();
+
+              for (int i = 0; i < targets.Count; i++) {
+                GameObject other = targets [i];
+                if (i != index) {
+                  StartCoroutine (ScaleObjectOut (other));
+                }
+              }
+              targetselected [index] = true;
+            }
+          }
 				}
 			}
 		}
 	}
 
-		 
-	/* Each GameObject has an associated server-assigned string objectId. 
-	 * The reverseObjectMap maps instanceId to objectId, and is thus used 
-	 * to fetch the objectId for a GameObject. Note: empty string should 
+  /**
+  * Scales a given game object out of the scene over multiple frames.
+  */
+  private IEnumerator ScaleObjectOut(GameObject obj) {
+    while (obj.transform.localScale.x > 0) {
+      Vector3 diff = (Vector3.one * Time.deltaTime * -1.0f * 0.5f);
+      obj.transform.localScale += diff;
+      yield return new WaitForSeconds (0.1f);
+    }
+    // finally set the object itself to be inactive to save performance.
+    obj.SetActive(false);
+  }
+
+
+	/* Each GameObject has an associated server-assigned string objectId.
+	 * The reverseObjectMap maps instanceId to objectId, and is thus used
+	 * to fetch the objectId for a GameObject. Note: empty string should
 	 * only be returned when the GameObject is first created.
 	 */
 	public string GetObjectId (GameObject obj) {
@@ -244,7 +261,7 @@ public class NetworkManager : MonoBehaviour {
 			debugServerPoints (height, width);
 			yield break;
 		} else {
-			
+
 			// create a texture to render the camera's view to
 			RenderTexture texture = new RenderTexture (width, height, 24);
 
@@ -274,12 +291,11 @@ public class NetworkManager : MonoBehaviour {
 			Debug.Log ("Writing " + raw_image_bytes.Length);
 			Dictionary<string, string> headers = new Dictionary<string, string> ();
 			headers.Add ("x-user-id", guid);
-			headers.Add ("x-dummy-id", "fucapplr");
 			headers.Add ("x-points", serializeARKitPoints ());
 
 			WWW w = new WWW (address + imageEndpoint, raw_image_bytes, headers);
 			Debug.Log ("Sent the request");
-			yield return w; 
+			yield return w;
 
 			Debug.Log ("Response has returned");
 			if (w.error != null) {
@@ -288,7 +304,7 @@ public class NetworkManager : MonoBehaviour {
 				Debug.Log ("IMAGE POINTS RETRIEVED FROM THE SERVER");
 				MatchedPoints points = MatchedPoints.CreateFromJSON (w.text);
 				Debug.Log (points.points.Count);
-		
+
 				if (points.points.Count == 0) {
 					pollForAnchor = true;
 				} else {
@@ -311,29 +327,29 @@ public class NetworkManager : MonoBehaviour {
 
 		WWW w = new WWW (address + pointPollEndpoint, post_data, headers);
 		Debug.Log("Sent the request");
-		yield return w; 
+		yield return w;
 
 		if (w.error != null) {
 			Debug.Log (w.error);
 		} else {
 			if (w.text.Length == 0) {
-				Debug.Log ("No anchor returned"); 
+				Debug.Log ("No anchor returned");
 			} else {
 				PointInformation anchorpoint = PointInformation.CreateFromJSON (w.text);
 				ARPoint arPoint = new ARPoint {
 					x = anchorpoint.x,
 					y = anchorpoint.y
 				};
-		
+
 				// prioritize reults types
 				ARHitTestResultType[] resultTypes = {
-					ARHitTestResultType.ARHitTestResultTypeExistingPlaneUsingExtent, 
+					ARHitTestResultType.ARHitTestResultTypeExistingPlaneUsingExtent,
 					// if you want to use infinite planes use this:
 					//ARHitTestResultType.ARHitTestResultTypeExistingPlane,
-					ARHitTestResultType.ARHitTestResultTypeHorizontalPlane, 
+					ARHitTestResultType.ARHitTestResultTypeHorizontalPlane,
 					ARHitTestResultType.ARHitTestResultTypeFeaturePoint
-				}; 
-		
+				};
+
 				foreach (ARHitTestResultType resultType in resultTypes)
 				{
 					if (HitTestWithResultType (arPoint, resultType))
@@ -367,7 +383,7 @@ public class NetworkManager : MonoBehaviour {
 
 	public void drawServerPoint(PointInformation point, int index) {
 		Vector2 pointVector = new Vector2 (point.x, point.y);
-		Vector3 anchorposition; 
+		Vector3 anchorposition;
 
    		bool matched = false;
 		foreach (KeyValuePair<Vector2, Vector3> val in hitPointMap) {
@@ -380,21 +396,11 @@ public class NetworkManager : MonoBehaviour {
 				Debug.Log ("Found point!");
 				anchorposition = val.Value;
 				Debug.Log (anchorposition.ToString ());
-				matchpoints.Add (anchorposition);
-				GameObject target = new GameObject ();
-				target.name = "target" + index;
-				SpriteRenderer r = target.AddComponent<SpriteRenderer> ();
-				target.AddComponent<BoxCollider> ();
-				targetselected.Add (false);
-				r.sprite = unselected;
-				r.enabled = true;
-				target.transform.position = anchorposition;
-				target.transform.localScale = new Vector3 (0.05f, 0.05f, 0.05f);
-				targets.Add (target);
+				DisplayAnchorPoint (anchorposition, index);
 				break;
 			}
 		}
-    
+
 	    if (!matched) {
 	        Debug.Log("No local match found for the server point");
 	        Debug.Log(pointVector);
@@ -402,6 +408,19 @@ public class NetworkManager : MonoBehaviour {
 
 		return;
 	}
+
+  private GameObject DisplayAnchorPoint(Vector3 pointPosition, int index) {
+    matchpoints.Add (pointPosition);
+    GameObject target = (GameObject) Instantiate (electricOrbPrefab, pointPosition, Quaternion.Euler(90, 45, 0));
+    target.name = "target" + index;
+    // SpriteRenderer r = target.AddComponent<SpriteRenderer> ();
+    // r.sprite = unselected;
+    targetselected.Add (false);
+    target.transform.position = pointPosition;
+    target.transform.localScale = new Vector3 (0.25f, 0.25f, 0.25f);
+    targets.Add (target);
+    return target;
+  }
 
 
 	bool HitTestWithResultType (ARPoint point, ARHitTestResultType resultTypes)
@@ -413,14 +432,7 @@ public class NetworkManager : MonoBehaviour {
 //				m_HitTransform.position = UnityARMatrixOps.GetPosition (hitResult.worldTransform);
 //				m_HitTransform.rotation = UnityARMatrixOps.GetRotation (hitResult.worldTransform);
 				Vector3 position = UnityARMatrixOps.GetPosition (hitResult.worldTransform);
-				GameObject target = new GameObject ();
-				SpriteRenderer r = target.AddComponent<SpriteRenderer> ();
-				target.AddComponent<BoxCollider> ();
-				r.sprite = selected;
-				r.enabled = true;
-				target.transform.position = position;
-				target.transform.localScale = new Vector3 (0.02f, 0.02f, 0.02f);
-
+				GameObject target = DisplayAnchorPoint (position, 0);
 
 				// anchor selected on server! LOCK IN
 				anchorChosen = true;
@@ -437,22 +449,23 @@ public class NetworkManager : MonoBehaviour {
 		if (synced) {
 			return;
 		}
-		
+
 		Vector3 selectedPosition3D = anchor.transform.position;
 		Vector2 selectedPosition2D;
 		reverseHitPointMap.TryGetValue (selectedPosition3D, out selectedPosition2D);
 		Dictionary<string, string> headers = new Dictionary<string, string> ();
 		headers.Add ("x-user-id", guid);
 		headers.Add ("x-xcord", selectedPosition2D.x.ToString());
-		headers.Add ("x-ycord", selectedPosition2D.y.ToString()); 
+		headers.Add ("x-ycord", selectedPosition2D.y.ToString());
 		byte[] post_data = new byte[0];
 
 		// generate a local cube to fuck with
-		newCube = Instantiate (hitCubePrefab, new Vector3 (0, 0, 0), Quaternion.identity);
-		newCube.SetActive (true);
-		anchor.SetActive (false);
+		multiplayerObject = Instantiate (multiplayerObjectPrefabOne, new Vector3 (0, 0, 0), Quaternion.Euler(90, 45, 0));
+    multiplayerObject.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f);
+		multiplayerObject.SetActive (true);
+		// anchor.SetActive (false);
 
-		TransformManager t = newCube.AddComponent<TransformManager> ();
+		TransformManager t = multiplayerObject.AddComponent<TransformManager> ();
 		t.nm = this;
 
 		synced = true;
@@ -461,8 +474,8 @@ public class NetworkManager : MonoBehaviour {
 		StartCoroutine(WaitForUserId(www));
 	}
 
-	/* Method is called if the user added an object to the environment 
-	 * OR if an object's position has changed. Not sending an ObjectId 
+	/* Method is called if the user added an object to the environment
+	 * OR if an object's position has changed. Not sending an ObjectId
 	 * signals the server that this is a brand new object.
 	 */
 	public void SendObject(string objectId, GameObject obj) {
@@ -481,7 +494,7 @@ public class NetworkManager : MonoBehaviour {
 			headers.Add ("x-object-id", objectId);
 		}
 		headers.Add ("x-xcord", offset.x.ToString ());
-		headers.Add ("x-ycord", offset.y.ToString ()); 
+		headers.Add ("x-ycord", offset.y.ToString ());
 		headers.Add ("x-zcord", offset.z.ToString ());
 		byte[] post_data = new byte[0];
 
@@ -489,17 +502,18 @@ public class NetworkManager : MonoBehaviour {
 		Debug.Log("Sent the request");
 		StartCoroutine(WaitForObjectId(w, obj));
 	}
-		
+
 	/* Get state of the world from server
 	 */
 	public void SyncWorld() {
 		if (!anchorChosen) {
 			return;
 		}
+    if (DEBUG == true) { return; } // spare server
 		WWW www = new WWW (address + syncEndpoint);
 		StartCoroutine (WaitForWorldSync (www));
 	}
-  
+
 	/* Get userId from server
 	 */
 	public IEnumerator WaitForUserId(WWW www) {
@@ -514,24 +528,24 @@ public class NetworkManager : MonoBehaviour {
 	}
 
 	/* If in SendObject() we pushed information about a brand new object,
-	 * the server will respond with an objectId which we use to update our 
+	 * the server will respond with an objectId which we use to update our
 	 * objectMap and reverseObjectMap.
 	 */
 	public IEnumerator WaitForObjectId(WWW www, GameObject obj) {
 		yield return www;
-		
+
 		if (www.error != null) {
 			Debug.Log ("WWW Error: " + www.error);
 			yield break;
 		}
-				
+
 		string objectId = www.text;
 
 		if (!objectMap.ContainsKey (objectId)) {
-			objectMap.Add (objectId, obj);	
+			objectMap.Add (objectId, obj);
 			reverseObjectMap.Add (obj.GetInstanceID (), objectId);
-		} 
-		TransformManager t = newCube.GetComponent<TransformManager> ();
+		}
+		TransformManager t = multiplayerObject.GetComponent<TransformManager> ();
 		t.objectId = objectId;
 
 	}
@@ -539,9 +553,9 @@ public class NetworkManager : MonoBehaviour {
 	/* Retrieves the server maintained state of the world,
 	 * for known GameObjects, updates their positions. For new objects,
 	 * places them into the world and then removes UnityARHitTestExample script
-	 * which prevents the user from modifying them. This way, a user cannot move 
+	 * which prevents the user from modifying them. This way, a user cannot move
 	 * objects created by another user.
-	 */ 
+	 */
 	public IEnumerator WaitForWorldSync(WWW www) {
 		yield return www;
 
@@ -549,7 +563,7 @@ public class NetworkManager : MonoBehaviour {
 			Debug.Log ("WWW Error: " + www.error);
 			yield break;
 		}
-			
+
 		RootObject root = RootObject.CreateFromJSON(www.text);
 
 		Debug.Log ("WORLD SYNC: " + root.objects.Count);
@@ -570,8 +584,10 @@ public class NetworkManager : MonoBehaviour {
 
 				obj.transform.position = newPos;
 			} else {
-				GameObject other = Instantiate (hitCubePrefab, otherPos + anchor.transform.position, Quaternion.identity);
-				other.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
+        // create a new game object!
+				GameObject other = Instantiate (multiplayerObjectPrefabTwo, otherPos + anchor.transform.position, Quaternion.identity);
+        other.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f);
+        other.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
 
 				objectMap.Add (objectId, other);
 				reverseObjectMap.Add (other.GetInstanceID (), objectId);
