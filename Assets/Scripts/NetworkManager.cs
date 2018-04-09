@@ -20,7 +20,7 @@ public class NetworkManager : MonoBehaviour {
 	public string imageEndpoint = "/image";
 	public string syncEndpoint = "/sync";
   
-	public bool DEBUG = false;
+	private bool DEBUG = false;
 
 	public Dictionary<string, GameObject> objectMap = new Dictionary<string, GameObject>();
 	public Dictionary<int, string> reverseObjectMap = new Dictionary<int, string> ();
@@ -239,63 +239,66 @@ public class NetworkManager : MonoBehaviour {
 
 	    // DEBUG code below that chooses the first 4 AR points and uses them to the sync up
 	    // to the rest of the existing multiplayar system
+		Debug.Log("Debug value: " + DEBUG);
 		if (DEBUG == true) {
-	      debugServerPoints(height, width);
-	      yield break;
-	    }
-
-		// create a texture to render the camera's view to
-		RenderTexture texture = new RenderTexture (width, height, 24);
-
-		// alternatively use textures from the main camera
-		Camera cam = mainCamera.GetComponentInChildren<Camera>();
-		int prevMask = cam.cullingMask;
-		cam.cullingMask = 0;
-		RenderTexture prevTexture = cam.targetTexture;
-		cam.targetTexture = texture;
-		cam.Render ();
-
-		// read the texture into a static texture2D
-		RenderTexture.active = texture; // make the global render texture this one
-		Texture2D savedTexture = new Texture2D(width, height, TextureFormat.RGB24, false);
-		savedTexture.ReadPixels (new Rect (0, 0, width, height), 0, 0);
-		savedTexture.Apply();
-		RenderTexture.active = null; // release the static reference
-
-		// once done, restore the main camera
-		cam.cullingMask = prevMask;
-		cam.targetTexture = prevTexture;
-
-		// send this image to a server
-		Debug.Log("Sending to the server");
-		byte[] raw_image_bytes;
-		raw_image_bytes = savedTexture.EncodeToPNG();
-		Debug.Log ("Writing " + raw_image_bytes.Length);
-		Dictionary<string, string> headers = new Dictionary<string, string> ();
-		headers.Add ("x-user-id", guid);
-		headers.Add ("x-dummy-id", "fucapplr");
-		headers.Add ("x-points", serializeARKitPoints());
-
-		WWW w = new WWW (address + imageEndpoint, raw_image_bytes, headers);
-		Debug.Log("Sent the request");
-		yield return w; 
-
-		Debug.Log ("Response has returned");
-		if (w.error != null) {
-			Debug.Log (w.error);
+			debugServerPoints (height, width);
+			yield break;
 		} else {
-			Debug.Log ("IMAGE POINTS RETRIEVED FROM THE SERVER");
-			MatchedPoints points = MatchedPoints.CreateFromJSON (w.text);
-			Debug.Log (points.points.Count);
-	
-			if (points.points.Count == 0) {
-				pollForAnchor = true;
+			
+			// create a texture to render the camera's view to
+			RenderTexture texture = new RenderTexture (width, height, 24);
+
+			// alternatively use textures from the main camera
+			Camera cam = mainCamera.GetComponentInChildren<Camera> ();
+			int prevMask = cam.cullingMask;
+			cam.cullingMask = 0;
+			RenderTexture prevTexture = cam.targetTexture;
+			cam.targetTexture = texture;
+			cam.Render ();
+
+			// read the texture into a static texture2D
+			RenderTexture.active = texture; // make the global render texture this one
+			Texture2D savedTexture = new Texture2D (width, height, TextureFormat.RGB24, false);
+			savedTexture.ReadPixels (new Rect (0, 0, width, height), 0, 0);
+			savedTexture.Apply ();
+			RenderTexture.active = null; // release the static reference
+
+			// once done, restore the main camera
+			cam.cullingMask = prevMask;
+			cam.targetTexture = prevTexture;
+
+			// send this image to a server
+			Debug.Log ("Sending to the server");
+			byte[] raw_image_bytes;
+			raw_image_bytes = savedTexture.EncodeToPNG ();
+			Debug.Log ("Writing " + raw_image_bytes.Length);
+			Dictionary<string, string> headers = new Dictionary<string, string> ();
+			headers.Add ("x-user-id", guid);
+			headers.Add ("x-dummy-id", "fucapplr");
+			headers.Add ("x-points", serializeARKitPoints ());
+
+			WWW w = new WWW (address + imageEndpoint, raw_image_bytes, headers);
+			Debug.Log ("Sent the request");
+			yield return w; 
+
+			Debug.Log ("Response has returned");
+			if (w.error != null) {
+				Debug.Log (w.error);
 			} else {
-				int i = 0;
-				foreach (PointInformation point in points.points) {
-					Debug.Log ("POINT x: " + point.x + " y: " + point.y);
-					drawServerPoint (point, i);
-					i++;
+				Debug.Log ("IMAGE POINTS RETRIEVED FROM THE SERVER");
+				MatchedPoints points = MatchedPoints.CreateFromJSON (w.text);
+				Debug.Log (points.points.Count);
+		
+				if (points.points.Count == 0) {
+					pollForAnchor = true;
+				} else {
+					int i = 0;
+					foreach (PointInformation point in points.points) {
+						Debug.Log ("POINT x: " + point.x + " y: " + point.y);
+						drawServerPoint (point, i);
+						i++;
+					}
+					anchorSelect = false;
 				}
 			}
 		}
