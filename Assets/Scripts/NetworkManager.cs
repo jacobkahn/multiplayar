@@ -32,6 +32,7 @@ public class NetworkManager : MonoBehaviour {
 	private List<Vector3> matchpoints;
 	private List<GameObject> targets;
 	private List<bool> targetselected;
+	private List<bool> targetenabled; 
 	private Dictionary<Vector2, Vector3> hitPointMap = new Dictionary<Vector2, Vector3> ();
 	private Dictionary<Vector3, Vector2> reverseHitPointMap = new Dictionary<Vector3, Vector2> ();
 
@@ -53,6 +54,8 @@ public class NetworkManager : MonoBehaviour {
 	private Sprite selected;
 	private Queue<Vector3> pointCloudQueue; 
 	private Vector3[] pointClouds;
+	private ParticleSystem.MinMaxGradient ogColor;
+	private List<IEnumerator> scaleEnumerator;
 
 	private byte[] empty_post_data = Encoding.ASCII.GetBytes("fucapplr");
 
@@ -115,6 +118,8 @@ public class NetworkManager : MonoBehaviour {
 		selected = selectedR.sprite;
 		anchorSelect = true;
 		targetselected = new List<bool> ();
+		targetenabled = new List<bool> ();
+		scaleEnumerator = new List<IEnumerator> ();
 		pointCloudQueue = new Queue<Vector3> ();
 		UnityARSessionNativeInterface.ARFrameUpdatedEvent += ARFrameUpdated;
     	// find the button (if it exists)
@@ -168,39 +173,66 @@ public class NetworkManager : MonoBehaviour {
 		}
 
 		if (!anchorSelect) {
-			foreach (GameObject t in targets) {
+			Camera tempCam = mainCamera.GetComponentInChildren<Camera>();
+
+			for (int i = 0; i < targets.Count; i++) {
+				GameObject t = targets [i];
 				t.transform.LookAt(mainCamera.transform, -Vector3.up);
+				Vector3 targetposition = tempCam.WorldToScreenPoint (t.transform.position);
+				int blocksize = 50;
+				if (targetposition.x < (Screen.width / 2) + blocksize && targetposition.x > (Screen.width / 2) - blocksize &&
+					targetposition.y < (Screen.height / 2) + blocksize && targetposition.y > (Screen.height / 2) - blocksize) {
+
+					var main = t.GetComponentInChildren<ParticleSystem> ().main;
+					main.startColor = new Color (0, 100, 0, 1);
+					targetenabled [i] = true;
+					t.transform.localScale = Vector3.one * 0.55f;
+//					if (scaleEnumerator[i] == null) {
+//						scaleEnumerator[i] = ScaleObject (t, 1.0f, 0.3f, i);
+//						StartCoroutine (scaleEnumerator[i]);
+//					}
+				} else {
+					var main = t.GetComponentInChildren<ParticleSystem> ().main;
+					main.startColor = ogColor;
+					targetenabled [i] = false;
+					t.transform.localScale = Vector3.one * 0.25f;
+//					if (scaleEnumerator[i] != null) {
+//						StopCoroutine (scaleEnumerator[i]);
+//						scaleEnumerator[i] = null;
+//					}
+				}
 			}
 
-			if (Input.touchCount > 0 && Input.GetTouch (0).phase == TouchPhase.Began)
-			{
+			// if the target is aligned with screen middle, change color to green
+			if (Input.touchCount > 0 && Input.GetTouch (0).phase == TouchPhase.Began) {
 				Ray ray = Camera.main.ScreenPointToRay( Input.GetTouch(0).position );
 				RaycastHit hit;
 
 				if ( Physics.Raycast(ray, out hit)) {
-          if (hit.transform.gameObject.name.StartsWith("target") ) {
-            int index;
-            int.TryParse (hit.transform.gameObject.name.Substring(6), out index);
-            Debug.Log (hit.transform.gameObject.name.Substring (6));
-            if (targetselected [index]) {
-              // deselect anchor
-              // hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = unselected;
-              targetselected [index] = false;
-            } else {
-              // select anchor
-              // hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = selected;
-              anchor = hit.transform.gameObject;
-              SendSelectedAnchor2D ();
+					if (hit.transform.gameObject.name.StartsWith("target") ) {
+						int index;
+						int.TryParse (hit.transform.gameObject.name.Substring(6), out index);
+						Debug.Log (hit.transform.gameObject.name.Substring (6));
+						if (targetselected [index] && targetenabled[index]) {
+							// deselect anchor
+							// hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = unselected;
+							targetselected [index] = false;
+						} else if(targetenabled[index]) {
+							// select anchor
+							// hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = selected;
+							anchor = hit.transform.gameObject;
+							Debug.Log ("Anchor chosen!");
+							SendSelectedAnchor2D ();
 
-              for (int i = 0; i < targets.Count; i++) {
-                GameObject other = targets [i];
-                if (i != index) {
-                  StartCoroutine (ScaleObjectOut (other));
-                }
-              }
-              targetselected [index] = true;
-            }
-          }
+							for (int i = 0; i < targets.Count; i++) {
+								GameObject other = targets [i];
+								if (i != index) {
+									StartCoroutine (ScaleObject (other, -1.0f, 0.0f, -1));
+								}
+							}
+							targetselected [index] = true;
+						}
+					}
 				}
 			}
 		}
@@ -209,15 +241,22 @@ public class NetworkManager : MonoBehaviour {
   /**
   * Scales a given game object out of the scene over multiple frames.
   */
-  private IEnumerator ScaleObjectOut(GameObject obj) {
-    while (obj.transform.localScale.x > 0) {
-      Vector3 diff = (Vector3.one * Time.deltaTime * -1.0f * 0.5f);
-      obj.transform.localScale += diff;
-      yield return new WaitForSeconds (0.1f);
-    }
-    // finally set the object itself to be inactive to save performance.
-    obj.SetActive(false);
-  }
+	private IEnumerator ScaleObject(GameObject obj, float direction, float end, int i) {
+		bool stop = false;
+		float speed = 0.75f;
+	    while (!stop) {
+			stop = direction == -1.0f ? obj.transform.localScale.x <= end : obj.transform.localScale.x >= end;
+			Vector3 diff = (Vector3.one * Time.deltaTime * direction * speed);
+		    obj.transform.localScale += diff;
+	        yield return new WaitForSeconds (0.1f);
+	    }
+		// finally set the object itself to be inactive to save performance.
+		if (i >= 0) {
+			scaleEnumerator [i] = null;
+		} else {
+			obj.SetActive(false);
+		}
+	}
 
 
 	/* Each GameObject has an associated server-assigned string objectId.
@@ -266,6 +305,14 @@ public class NetworkManager : MonoBehaviour {
 	public IEnumerator captureCameraView() {
 		int height = Screen.height;
 		int width = Screen.width;
+
+		// hide the yellow points!
+		GameObject ps = GameObject.Find ("PointCloudParticleExample");
+		ParticleSystem psp = ps.GetComponent<PointCloudParticleExample>().currentPS;
+		if (psp != null) {
+			Destroy (psp);
+		}
+		ps.SetActive(false);
 
 	    // DEBUG code below that chooses the first 4 AR points and uses them to the sync up
 	    // to the rest of the existing multiplayar system
@@ -423,10 +470,13 @@ public class NetworkManager : MonoBehaviour {
   private GameObject DisplayAnchorPoint(Vector3 pointPosition, int index) {
     matchpoints.Add (pointPosition);
     GameObject target = (GameObject) Instantiate (electricOrbPrefab, pointPosition, Quaternion.Euler(90, 45, 0));
+	ogColor = target.GetComponentInChildren<ParticleSystem> ().main.startColor;
     target.name = "target" + index;
     // SpriteRenderer r = target.AddComponent<SpriteRenderer> ();
     // r.sprite = unselected;
     targetselected.Add (false);
+	targetenabled.Add (false);
+	scaleEnumerator.Add (null);
     target.transform.position = pointPosition;
     target.transform.localScale = new Vector3 (0.25f, 0.25f, 0.25f);
     targets.Add (target);

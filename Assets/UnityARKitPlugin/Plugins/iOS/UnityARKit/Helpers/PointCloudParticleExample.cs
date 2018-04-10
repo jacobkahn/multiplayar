@@ -9,7 +9,7 @@ public class PointCloudParticleExample : MonoBehaviour {
     public float particleSize = 1.0f;
     private Vector3[] m_PointCloudData;
     private bool frameUpdated = false;
-    private ParticleSystem currentPS;
+    public ParticleSystem currentPS;
     private ParticleSystem.Particle [] particles;
 
 	// Use this for initialization
