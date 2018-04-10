@@ -356,75 +356,20 @@ public class NetworkManager : MonoBehaviour {
 				anchorSelect = true;
 				anchor = target;
 
-//				Debug.Log (w.text);
-//				double grid_size = 50;
-//				double max_grid_size = 750;
-//				bool passedHitTest = false;
-//				while (!passedHitTest && grid_size < max_grid_size) {
-//					passedHitTest = RunHitTestForGridAroundPoint (grid_size, new Vector2 (Mathf.Round (anchorpoint.x), Mathf.Round (anchorpoint.y)));
-//					grid_size += 50;
-//				}
-//				Debug.Log ("Failed everything! Checking for AR point.");
-//				double radius = 50;
-//				passedHitTest = false;
-//				while (!passedHitTest && radius < max_grid_size) {
-//					passedHitTest = FindARPointInGrid (radius, new Vector2 (Mathf.Round (anchorpoint.x), Mathf.Round (anchorpoint.y)));
-//					radius += 50;
-//				}
+				// generate a local cube to fuck with
+				multiplayerObject = Instantiate (multiplayerObjectPrefabTwo, new Vector3 (0, 0, 0), Quaternion.identity);
+				multiplayerObject.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f);
+				multiplayerObject.SetActive (true);
+				// anchor.SetActive (false);
+
+				TransformManager t = multiplayerObject.AddComponent<TransformManager> ();
+				t.nm = this;
+
+
 			}
 		}
 		yield break;
 	}
-
-
-	public bool RunHitTestForGridAroundPoint(double grid_size, Vector2 point) {
-		float x = point.x;
-		float y = point.y;
-//		double step = Mathf.Round ((float) (grid_size / step));
-		double step = 1;
-		for (double i = -1.0 * (grid_size / 2.0f); i < grid_size / 2; i+= step) {
-			// each row
-			for (double j = -1.0 * (grid_size / 2.0f); j < grid_size / 2; j+= step) {
-				// each point in column
-				Vector2 testPoint = new Vector2((float) (x + i), (float) (y + j));
-				if (testPoint.x > Screen.width || testPoint.y > Screen.height) {
-					if (RunHitTestAt2DPoint(testPoint)) {
-						return true; // we done motherfucker
-					}
-				}
-
-			}
-		}
-		Debug.Log ("FUCKED");
-		return false;
-	}
-
-	public bool RunHitTestAt2DPoint(Vector2 point) {
-		ARPoint arPoint = new ARPoint {
-			x = point.x,
-			y = point.y
-		};
-
-		// prioritize reults types
-		ARHitTestResultType[] resultTypes = {
-			ARHitTestResultType.ARHitTestResultTypeExistingPlaneUsingExtent,
-			// if you want to use infinite planes use this:
-			ARHitTestResultType.ARHitTestResultTypeExistingPlane,
-			ARHitTestResultType.ARHitTestResultTypeHorizontalPlane,
-			ARHitTestResultType.ARHitTestResultTypeFeaturePoint
-		};
-
-		foreach (ARHitTestResultType resultType in resultTypes) {
-			if (HitTestWithResultType (arPoint, resultType))
-			{
-//				pollForAnchor = false;
-				return true;
-			}
-		}
-		return false;
-	}
-
-
 
 	public string serializeARKitPoints() {
 		lockPoints = true;
@@ -583,7 +528,7 @@ public class NetworkManager : MonoBehaviour {
 		Debug.Log ("received useless user id. Generating ROCKET");
 
 		// generate a local cube to fuck with
-		multiplayerObject = Instantiate (multiplayerObjectPrefabOne, new Vector3 (0, 0, 0), Quaternion.Euler(90, 45, 0));
+		multiplayerObject = Instantiate (multiplayerObjectPrefabOne, new Vector3 (0, 0, 0), Quaternion.identity);
 		multiplayerObject.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f);
 		multiplayerObject.SetActive (true);
 		// anchor.SetActive (false);
