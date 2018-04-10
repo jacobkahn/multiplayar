@@ -5,7 +5,7 @@ using UnityEngine.Networking;
 using UnityEngine.XR.iOS;
 using UnityEngine;
 using UnityEngine.UI;
-
+using System.Text;
 
 /* NetworkManager manages synchronization of all the objects
  * in the scene and communicating with the server
@@ -26,9 +26,9 @@ public class NetworkManager : MonoBehaviour {
 	public Dictionary<int, string> reverseObjectMap = new Dictionary<int, string> ();
 	public GameObject mainCamera;
 	public GameObject multiplayerObjectPrefabOne;
-  public GameObject multiplayerObjectPrefabTwo;
-  public GameObject electricOrbPrefab;
-  private GameObject anchor;
+  	public GameObject multiplayerObjectPrefabTwo;
+  	public GameObject electricOrbPrefab;
+  	private GameObject anchor;
 	private List<Vector3> matchpoints;
 	private List<GameObject> targets;
 	private List<bool> targetselected;
@@ -51,8 +51,10 @@ public class NetworkManager : MonoBehaviour {
 
 	private Sprite unselected;
 	private Sprite selected;
+	private Queue<Vector3> pointCloudQueue; 
 	private Vector3[] pointClouds;
 
+	private byte[] empty_post_data = Encoding.ASCII.GetBytes("fucapplr");
 
 	[System.Serializable]
 	public class PointInformation {
@@ -113,6 +115,7 @@ public class NetworkManager : MonoBehaviour {
 		selected = selectedR.sprite;
 		anchorSelect = true;
 		targetselected = new List<bool> ();
+		pointCloudQueue = new Queue<Vector3> ();
 		UnityARSessionNativeInterface.ARFrameUpdatedEvent += ARFrameUpdated;
     	// find the button (if it exists)
   	  	setButtonText("Wait");
@@ -139,7 +142,18 @@ public class NetworkManager : MonoBehaviour {
 	    }
 
 		if (!lockPoints) {
-			pointClouds = camera.pointCloudData;
+			foreach (Vector3 point in camera.pointCloudData) {
+				if (pointCloudQueue.Contains (point)) {
+					continue;
+				}
+
+				if (pointCloudQueue.Count > 50) {
+					pointCloudQueue.Dequeue ();
+				}
+
+				pointCloudQueue.Enqueue (point);
+			}
+			pointClouds = pointCloudQueue.ToArray();
 		}
 	}
 
@@ -175,7 +189,6 @@ public class NetworkManager : MonoBehaviour {
             } else {
               // select anchor
               // hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = selected;
-              anchorChosen = true;
               anchor = hit.transform.gameObject;
               SendSelectedAnchor2D ();
 
@@ -294,7 +307,6 @@ public class NetworkManager : MonoBehaviour {
 			headers.Add ("x-points", serializeARKitPoints ());
 
 			WWW w = new WWW (address + imageEndpoint, raw_image_bytes, headers);
-			Debug.Log ("Sent the request");
 			yield return w;
 
 			Debug.Log ("Response has returned");
@@ -307,6 +319,7 @@ public class NetworkManager : MonoBehaviour {
 
 				if (points.points.Count == 0) {
 					pollForAnchor = true;
+
 				} else {
 					int i = 0;
 					foreach (PointInformation point in points.points) {
@@ -321,52 +334,103 @@ public class NetworkManager : MonoBehaviour {
 	}
 
 	public IEnumerator requestAnchorPoint() {
+		pollForAnchor = false;
 		Dictionary<string, string> headers = new Dictionary<string, string> ();
 		headers.Add ("x-user-id", guid);
-		byte[] post_data = new byte[0];
 
-		WWW w = new WWW (address + pointPollEndpoint, post_data, headers);
-		Debug.Log("Sent the request");
+		WWW w = new WWW (address + pointPollEndpoint, empty_post_data, headers);
 		yield return w;
 
 		if (w.error != null) {
 			Debug.Log (w.error);
 		} else {
 			if (w.text.Length == 0) {
-				Debug.Log ("No anchor returned");
+				pollForAnchor = true;
 			} else {
 				PointInformation anchorpoint = PointInformation.CreateFromJSON (w.text);
-				ARPoint arPoint = new ARPoint {
-					x = anchorpoint.x,
-					y = anchorpoint.y
-				};
 
-				// prioritize reults types
-				ARHitTestResultType[] resultTypes = {
-					ARHitTestResultType.ARHitTestResultTypeExistingPlaneUsingExtent,
-					// if you want to use infinite planes use this:
-					//ARHitTestResultType.ARHitTestResultTypeExistingPlane,
-					ARHitTestResultType.ARHitTestResultTypeHorizontalPlane,
-					ARHitTestResultType.ARHitTestResultTypeFeaturePoint
-				};
+				GameObject target = drawServerPoint (anchorpoint, 0);
 
-				foreach (ARHitTestResultType resultType in resultTypes)
-				{
-					if (HitTestWithResultType (arPoint, resultType))
-					{
-						pollForAnchor = false;
-						yield break;
-					}
-				}
+				// anchor selected on server! LOCK IN
+				anchorChosen = true;
+				anchorSelect = true;
+				anchor = target;
+
+//				Debug.Log (w.text);
+//				double grid_size = 50;
+//				double max_grid_size = 750;
+//				bool passedHitTest = false;
+//				while (!passedHitTest && grid_size < max_grid_size) {
+//					passedHitTest = RunHitTestForGridAroundPoint (grid_size, new Vector2 (Mathf.Round (anchorpoint.x), Mathf.Round (anchorpoint.y)));
+//					grid_size += 50;
+//				}
+//				Debug.Log ("Failed everything! Checking for AR point.");
+//				double radius = 50;
+//				passedHitTest = false;
+//				while (!passedHitTest && radius < max_grid_size) {
+//					passedHitTest = FindARPointInGrid (radius, new Vector2 (Mathf.Round (anchorpoint.x), Mathf.Round (anchorpoint.y)));
+//					radius += 50;
+//				}
 			}
 		}
+		yield break;
 	}
+
+
+	public bool RunHitTestForGridAroundPoint(double grid_size, Vector2 point) {
+		float x = point.x;
+		float y = point.y;
+//		double step = Mathf.Round ((float) (grid_size / step));
+		double step = 1;
+		for (double i = -1.0 * (grid_size / 2.0f); i < grid_size / 2; i+= step) {
+			// each row
+			for (double j = -1.0 * (grid_size / 2.0f); j < grid_size / 2; j+= step) {
+				// each point in column
+				Vector2 testPoint = new Vector2((float) (x + i), (float) (y + j));
+				if (testPoint.x > Screen.width || testPoint.y > Screen.height) {
+					if (RunHitTestAt2DPoint(testPoint)) {
+						return true; // we done motherfucker
+					}
+				}
+
+			}
+		}
+		Debug.Log ("FUCKED");
+		return false;
+	}
+
+	public bool RunHitTestAt2DPoint(Vector2 point) {
+		ARPoint arPoint = new ARPoint {
+			x = point.x,
+			y = point.y
+		};
+
+		// prioritize reults types
+		ARHitTestResultType[] resultTypes = {
+			ARHitTestResultType.ARHitTestResultTypeExistingPlaneUsingExtent,
+			// if you want to use infinite planes use this:
+			ARHitTestResultType.ARHitTestResultTypeExistingPlane,
+			ARHitTestResultType.ARHitTestResultTypeHorizontalPlane,
+			ARHitTestResultType.ARHitTestResultTypeFeaturePoint
+		};
+
+		foreach (ARHitTestResultType resultType in resultTypes) {
+			if (HitTestWithResultType (arPoint, resultType))
+			{
+//				pollForAnchor = false;
+				return true;
+			}
+		}
+		return false;
+	}
+
 
 
 	public string serializeARKitPoints() {
 		lockPoints = true;
 		string serialized = "";
 		Camera cam = mainCamera.GetComponentInChildren<Camera> ();
+		Debug.Log ("Number of points we're sending: " + pointClouds.Length);
 		foreach (Vector3 point in pointClouds) {
 			Vector3 screenPos = cam.WorldToScreenPoint (point);
 	      	string pointStringX = string.Format ("{0:0.000}", screenPos.x);
@@ -381,9 +445,11 @@ public class NetworkManager : MonoBehaviour {
 	}
 
 
-	public void drawServerPoint(PointInformation point, int index) {
+	public GameObject drawServerPoint(PointInformation point, int index) {
 		Vector2 pointVector = new Vector2 (point.x, point.y);
 		Vector3 anchorposition;
+
+		GameObject pointObj = null;
 
    		bool matched = false;
 		foreach (KeyValuePair<Vector2, Vector3> val in hitPointMap) {
@@ -396,7 +462,7 @@ public class NetworkManager : MonoBehaviour {
 				Debug.Log ("Found point!");
 				anchorposition = val.Value;
 				Debug.Log (anchorposition.ToString ());
-				DisplayAnchorPoint (anchorposition, index);
+				pointObj = DisplayAnchorPoint (anchorposition, index);
 				break;
 			}
 		}
@@ -406,7 +472,7 @@ public class NetworkManager : MonoBehaviour {
 	        Debug.Log(pointVector);
 	    }
 
-		return;
+		return pointObj;
 	}
 
   private GameObject DisplayAnchorPoint(Vector3 pointPosition, int index) {
@@ -426,8 +492,8 @@ public class NetworkManager : MonoBehaviour {
 	bool HitTestWithResultType (ARPoint point, ARHitTestResultType resultTypes)
 	{
 		List<ARHitTestResult> hitResults = UnityARSessionNativeInterface.GetARSessionNativeInterface ().HitTest (point, resultTypes);
-		Debug.Log (hitResults.Count);
 		if (hitResults.Count > 0) {
+			Debug.Log ("Got a hit");
 			foreach (var hitResult in hitResults) {
 //				m_HitTransform.position = UnityARMatrixOps.GetPosition (hitResult.worldTransform);
 //				m_HitTransform.rotation = UnityARMatrixOps.GetRotation (hitResult.worldTransform);
@@ -457,20 +523,10 @@ public class NetworkManager : MonoBehaviour {
 		headers.Add ("x-user-id", guid);
 		headers.Add ("x-xcord", selectedPosition2D.x.ToString());
 		headers.Add ("x-ycord", selectedPosition2D.y.ToString());
-		byte[] post_data = new byte[0];
 
-		// generate a local cube to fuck with
-		multiplayerObject = Instantiate (multiplayerObjectPrefabOne, new Vector3 (0, 0, 0), Quaternion.Euler(90, 45, 0));
-    multiplayerObject.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f);
-		multiplayerObject.SetActive (true);
-		// anchor.SetActive (false);
-
-		TransformManager t = multiplayerObject.AddComponent<TransformManager> ();
-		t.nm = this;
-
-		synced = true;
-
-		WWW www = new WWW(address + anchorEndpoint, post_data, headers);
+		synced = false;
+	
+		WWW www = new WWW(address + anchorEndpoint, empty_post_data, headers);
 		StartCoroutine(WaitForUserId(www));
 	}
 
@@ -496,10 +552,8 @@ public class NetworkManager : MonoBehaviour {
 		headers.Add ("x-xcord", offset.x.ToString ());
 		headers.Add ("x-ycord", offset.y.ToString ());
 		headers.Add ("x-zcord", offset.z.ToString ());
-		byte[] post_data = new byte[0];
 
-		WWW w = new WWW (address + objectEndpoint, post_data, headers);
-		Debug.Log("Sent the request");
+		WWW w = new WWW (address + objectEndpoint, empty_post_data, headers);
 		StartCoroutine(WaitForObjectId(w, obj));
 	}
 
@@ -525,6 +579,20 @@ public class NetworkManager : MonoBehaviour {
 		}
 
 		userId = www.text;
+		synced = true;
+		Debug.Log ("received useless user id. Generating ROCKET");
+
+		// generate a local cube to fuck with
+		multiplayerObject = Instantiate (multiplayerObjectPrefabOne, new Vector3 (0, 0, 0), Quaternion.Euler(90, 45, 0));
+		multiplayerObject.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f);
+		multiplayerObject.SetActive (true);
+		// anchor.SetActive (false);
+
+		TransformManager t = multiplayerObject.AddComponent<TransformManager> ();
+		t.nm = this;
+
+		// NOW start sending sync
+		anchorChosen = true;
 	}
 
 	/* If in SendObject() we pushed information about a brand new object,
