@@ -56,6 +56,10 @@ public class NetworkManager : MonoBehaviour {
 	private Vector3[] pointClouds;
 	private ParticleSystem.MinMaxGradient ogColor;
 	private List<IEnumerator> scaleEnumerator;
+	private bool setHeading;
+	private float heading; 
+
+	private GameObject selectedMultiplayARAnchor;
 
 	private byte[] empty_post_data = Encoding.ASCII.GetBytes("fucapplr");
 
@@ -96,6 +100,7 @@ public class NetworkManager : MonoBehaviour {
 	public class RootObject {
 		public List<VectorInformation> users;
 		public List<VectorInformation> objects;
+		public float rotation;
 
 		public static RootObject CreateFromJSON (string j) {
 			return JsonUtility.FromJson<RootObject> (j);
@@ -122,6 +127,8 @@ public class NetworkManager : MonoBehaviour {
 		scaleEnumerator = new List<IEnumerator> ();
 		pointCloudQueue = new Queue<Vector3> ();
 		UnityARSessionNativeInterface.ARFrameUpdatedEvent += ARFrameUpdated;
+		Input.location.Start ();
+		setHeading = false;
     	// find the button (if it exists)
   	  	setButtonText("Wait");
 	}
@@ -172,65 +179,96 @@ public class NetworkManager : MonoBehaviour {
 			}
 		}
 
-		if (!anchorSelect) {
+		if (setHeading) { 
 			Camera tempCam = mainCamera.GetComponentInChildren<Camera>();
+			GameObject t = selectedMultiplayARAnchor;
+			t.transform.LookAt(mainCamera.transform, -Vector3.up);
+			Vector3 targetposition = tempCam.WorldToScreenPoint (t.transform.position);
+			int blocksize = 50;
+			if (targetposition.x < (Screen.width / 2) + blocksize && targetposition.x > (Screen.width / 2) - blocksize &&
+				targetposition.y < (Screen.height / 2) + blocksize && targetposition.y > (Screen.height / 2) - blocksize) {
 
-			for (int i = 0; i < targets.Count; i++) {
-				GameObject t = targets [i];
-				t.transform.LookAt(mainCamera.transform, -Vector3.up);
-				Vector3 targetposition = tempCam.WorldToScreenPoint (t.transform.position);
-				int blocksize = 50;
-				if (targetposition.x < (Screen.width / 2) + blocksize && targetposition.x > (Screen.width / 2) - blocksize &&
-					targetposition.y < (Screen.height / 2) + blocksize && targetposition.y > (Screen.height / 2) - blocksize) {
+				setHeading = false;
+				heading = Input.compass.trueHeading;
+				var main = t.GetComponentInChildren<ParticleSystem> ().main;
+				main.startColor = new Color (0, 100, 0, 1);
+				t.transform.localScale = Vector3.one * 0.55f;
 
-					var main = t.GetComponentInChildren<ParticleSystem> ().main;
-					main.startColor = new Color (0, 100, 0, 1);
-					targetenabled [i] = true;
-					t.transform.localScale = Vector3.one * 0.55f;
-//					if (scaleEnumerator[i] == null) {
-//						scaleEnumerator[i] = ScaleObject (t, 1.0f, 0.3f, i);
-//						StartCoroutine (scaleEnumerator[i]);
-//					}
-				} else {
-					var main = t.GetComponentInChildren<ParticleSystem> ().main;
-					main.startColor = ogColor;
-					targetenabled [i] = false;
-					t.transform.localScale = Vector3.one * 0.25f;
-//					if (scaleEnumerator[i] != null) {
-//						StopCoroutine (scaleEnumerator[i]);
-//						scaleEnumerator[i] = null;
-//					}
+				anchorChosen = true;
+
+				// generate a local cube to fuck with
+				multiplayerObject = Instantiate (multiplayerObjectPrefabTwo, new Vector3 (0, 0, 0), Quaternion.identity);
+				multiplayerObject.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f);
+				multiplayerObject.SetActive (true);
+				// anchor.SetActive (false);
+
+				TransformManager tm = multiplayerObject.AddComponent<TransformManager> ();
+				tm.nm = this;
+			}	
+		
+		} else {
+			
+			if (!anchorSelect) {
+				Camera tempCam = mainCamera.GetComponentInChildren<Camera> ();
+
+				for (int i = 0; i < targets.Count; i++) {
+					GameObject t = targets [i];
+					t.transform.LookAt (mainCamera.transform, -Vector3.up);
+					Vector3 targetposition = tempCam.WorldToScreenPoint (t.transform.position);
+					int blocksize = 50;
+					if (targetposition.x < (Screen.width / 2) + blocksize && targetposition.x > (Screen.width / 2) - blocksize &&
+					    targetposition.y < (Screen.height / 2) + blocksize && targetposition.y > (Screen.height / 2) - blocksize) {
+
+						var main = t.GetComponentInChildren<ParticleSystem> ().main;
+						main.startColor = new Color (0, 100, 0, 1);
+						targetenabled [i] = true;
+						t.transform.localScale = Vector3.one * 0.55f;
+						//					if (scaleEnumerator[i] == null) {
+						//						scaleEnumerator[i] = ScaleObject (t, 1.0f, 0.3f, i);
+						//						StartCoroutine (scaleEnumerator[i]);
+						//					}
+					} else {
+						var main = t.GetComponentInChildren<ParticleSystem> ().main;
+						main.startColor = ogColor;
+						targetenabled [i] = false;
+						t.transform.localScale = Vector3.one * 0.25f;
+						//					if (scaleEnumerator[i] != null) {
+						//						StopCoroutine (scaleEnumerator[i]);
+						//						scaleEnumerator[i] = null;
+						//					}
+					}
 				}
-			}
 
-			// if the target is aligned with screen middle, change color to green
-			if (Input.touchCount > 0 && Input.GetTouch (0).phase == TouchPhase.Began) {
-				Ray ray = Camera.main.ScreenPointToRay( Input.GetTouch(0).position );
-				RaycastHit hit;
+				// if the target is aligned with screen middle, change color to green
+				if (Input.touchCount > 0 && Input.GetTouch (0).phase == TouchPhase.Began) {
+					Ray ray = Camera.main.ScreenPointToRay (Input.GetTouch (0).position);
+					RaycastHit hit;
 
-				if ( Physics.Raycast(ray, out hit)) {
-					if (hit.transform.gameObject.name.StartsWith("target") ) {
-						int index;
-						int.TryParse (hit.transform.gameObject.name.Substring(6), out index);
-						Debug.Log (hit.transform.gameObject.name.Substring (6));
-						if (targetselected [index] && targetenabled[index]) {
-							// deselect anchor
-							// hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = unselected;
-							targetselected [index] = false;
-						} else if(targetenabled[index]) {
-							// select anchor
-							// hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = selected;
-							anchor = hit.transform.gameObject;
-							Debug.Log ("Anchor chosen!");
-							SendSelectedAnchor2D ();
+					if (Physics.Raycast (ray, out hit)) {
+						if (hit.transform.gameObject.name.StartsWith ("target")) {
+							int index;
+							int.TryParse (hit.transform.gameObject.name.Substring (6), out index);
+							Debug.Log (hit.transform.gameObject.name.Substring (6));
+							if (targetselected [index] && targetenabled [index]) {
+								// deselect anchor
+								// hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = unselected;
+								targetselected [index] = false;
+							} else if (targetenabled [index]) {
+								// select anchor
+								// hit.transform.gameObject.GetComponent<SpriteRenderer> ().sprite = selected;
+								anchor = hit.transform.gameObject;
+								Debug.Log ("Anchor chosen!");
+								SendSelectedAnchor2D ();
 
-							for (int i = 0; i < targets.Count; i++) {
-								GameObject other = targets [i];
-								if (i != index) {
-									StartCoroutine (ScaleObject (other, -1.0f, 0.0f, -1));
+
+								for (int i = 0; i < targets.Count; i++) {
+									GameObject other = targets [i];
+									if (i != index) {
+										StartCoroutine (ScaleObject (other, -1.0f, 0.0f, -1));
+									}
 								}
+								targetselected [index] = true;
 							}
-							targetselected [index] = true;
 						}
 					}
 				}
@@ -396,23 +434,13 @@ public class NetworkManager : MonoBehaviour {
 			} else {
 				PointInformation anchorpoint = PointInformation.CreateFromJSON (w.text);
 
-				GameObject target = drawServerPoint (anchorpoint, 0);
+				selectedMultiplayARAnchor = drawServerPoint (anchorpoint, 0);
 
 				// anchor selected on server! LOCK IN
-				anchorChosen = true;
+				//anchorChosen = true;
 				anchorSelect = true;
-				anchor = target;
-
-				// generate a local cube to fuck with
-				multiplayerObject = Instantiate (multiplayerObjectPrefabTwo, new Vector3 (0, 0, 0), Quaternion.identity);
-				multiplayerObject.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f);
-				multiplayerObject.SetActive (true);
-				// anchor.SetActive (false);
-
-				TransformManager t = multiplayerObject.AddComponent<TransformManager> ();
-				t.nm = this;
-
-
+				anchor = selectedMultiplayARAnchor;
+				setHeading = true;
 			}
 		}
 		yield break;
@@ -511,6 +539,8 @@ public class NetworkManager : MonoBehaviour {
 			return;
 		}
 
+		float heading = Input.compass.trueHeading; 
+		Debug.Log ("Heading: " + heading.ToString ());
 		Vector3 selectedPosition3D = anchor.transform.position;
 		Vector2 selectedPosition2D;
 		reverseHitPointMap.TryGetValue (selectedPosition3D, out selectedPosition2D);
@@ -532,7 +562,7 @@ public class NetworkManager : MonoBehaviour {
 	public void SendObject(string objectId, GameObject obj) {
 		GameObject temp = new GameObject ();
 		temp.transform.position = obj.transform.position;
-		temp.transform.RotateAround (anchor.transform.position, Vector3.up, -1.0f * anchor.transform.rotation.eulerAngles.y);
+//		temp.transform.RotateAround (anchor.transform.position, Vector3.up, -1.0f * anchor.transform.rotation.eulerAngles.y);
 		temp.transform.position = temp.transform.position - anchor.transform.position;
 		Vector3 offset = temp.transform.position;
 
@@ -544,6 +574,7 @@ public class NetworkManager : MonoBehaviour {
 		if (objectId.Length != 0) {
 			headers.Add ("x-object-id", objectId);
 		}
+		headers.Add ("x-rotation", heading.ToString ());
 		headers.Add ("x-xcord", offset.x.ToString ());
 		headers.Add ("x-ycord", offset.y.ToString ());
 		headers.Add ("x-zcord", offset.z.ToString ());
@@ -642,15 +673,17 @@ public class NetworkManager : MonoBehaviour {
 
 				GameObject temp = new GameObject ();
 				temp.transform.position = otherPos + anchor.transform.position;
-				temp.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
+//				temp.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
 				Vector3 newPos = temp.transform.position;
 
 				obj.transform.position = newPos;
 			} else {
-        // create a new game object!
+        		// create a new game object!
 				GameObject other = Instantiate (multiplayerObjectPrefabTwo, otherPos + anchor.transform.position, Quaternion.identity);
-        other.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f);
-        other.transform.RotateAround (anchor.transform.position, Vector3.up, anchor.transform.rotation.eulerAngles.y);
+       			other.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f);
+				float rotationOffset = heading - root.rotation;
+
+        		other.transform.RotateAround (anchor.transform.position, Vector3.up, rotationOffset);
 
 				objectMap.Add (objectId, other);
 				reverseObjectMap.Add (other.GetInstanceID (), objectId);
