@@ -32,7 +32,7 @@ public class NetworkManager : MonoBehaviour {
 	private List<Vector3> matchpoints;
 	private List<GameObject> targets;
 	private List<bool> targetselected;
-	private List<bool> targetenabled; 
+	private List<bool> targetenabled;
 	private Dictionary<Vector2, Vector3> hitPointMap = new Dictionary<Vector2, Vector3> ();
 	private Dictionary<Vector3, Vector2> reverseHitPointMap = new Dictionary<Vector3, Vector2> ();
 
@@ -52,12 +52,12 @@ public class NetworkManager : MonoBehaviour {
 
 	private Sprite unselected;
 	private Sprite selected;
-	private Queue<Vector3> pointCloudQueue; 
+	private Queue<Vector3> pointCloudQueue;
 	private Vector3[] pointClouds;
 	private ParticleSystem.MinMaxGradient ogColor;
 	private List<IEnumerator> scaleEnumerator;
 	private bool setHeading;
-	private float heading; 
+	private float heading;
 
 	private GameObject selectedMultiplayARAnchor;
 
@@ -179,7 +179,7 @@ public class NetworkManager : MonoBehaviour {
 			}
 		}
 
-		if (setHeading) { 
+		if (setHeading) {
 			Camera tempCam = mainCamera.GetComponentInChildren<Camera>();
 			GameObject t = selectedMultiplayARAnchor;
 			t.transform.LookAt(mainCamera.transform, -Vector3.up);
@@ -197,17 +197,17 @@ public class NetworkManager : MonoBehaviour {
 				anchorChosen = true;
 
 				// generate a local cube to fuck with
-				multiplayerObject = Instantiate (multiplayerObjectPrefabTwo, new Vector3 (0, 0, 0), Quaternion.identity);
+				multiplayerObject = Instantiate (multiplayerObjectPrefabOne, new Vector3 (0, 0, 0), Quaternion.identity);
 				multiplayerObject.transform.localScale = new Vector3(0.05f, 0.05f, 0.05f);
 				multiplayerObject.SetActive (true);
 				// anchor.SetActive (false);
 
 				TransformManager tm = multiplayerObject.AddComponent<TransformManager> ();
 				tm.nm = this;
-			}	
-		
+			}
+
 		} else {
-			
+
 			if (!anchorSelect) {
 				Camera tempCam = mainCamera.GetComponentInChildren<Camera> ();
 
@@ -539,7 +539,7 @@ public class NetworkManager : MonoBehaviour {
 			return;
 		}
 
-		float heading = Input.compass.trueHeading; 
+		float heading = Input.compass.trueHeading;
 		Debug.Log ("Heading: " + heading.ToString ());
 		Vector3 selectedPosition3D = anchor.transform.position;
 		Vector2 selectedPosition2D;
@@ -550,7 +550,7 @@ public class NetworkManager : MonoBehaviour {
 		headers.Add ("x-ycord", selectedPosition2D.y.ToString());
 
 		synced = false;
-	
+
 		WWW www = new WWW(address + anchorEndpoint, empty_post_data, headers);
 		StartCoroutine(WaitForUserId(www));
 	}
