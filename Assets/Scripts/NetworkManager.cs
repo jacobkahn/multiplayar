@@ -46,6 +46,7 @@ public class NetworkManager : MonoBehaviour {
 	private int frames;
 	private bool lockPoints = false;
 	private bool pollForAnchor = false;
+  private int POINTCLOUDBUFFERSIZE = 20;
 
 	private string syncButtonGameObjectName = "SyncButton";
 	private bool readyToSync = false;
@@ -148,18 +149,13 @@ public class NetworkManager : MonoBehaviour {
   	}
 
 	public void ARFrameUpdated(UnityARCamera camera) {
-	    if (readyToSync == false) {
-	      readyToSync = true;
-	      setButtonText("Sync");
-	    }
-
 		if (!lockPoints) {
 			foreach (Vector3 point in camera.pointCloudData) {
 				if (pointCloudQueue.Contains (point)) {
 					continue;
 				}
 
-				if (pointCloudQueue.Count > 50) {
+				if (pointCloudQueue.Count > POINTCLOUDBUFFERSIZE) {
 					pointCloudQueue.Dequeue ();
 				}
 
